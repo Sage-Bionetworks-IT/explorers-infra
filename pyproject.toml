@@ -1,7 +1,7 @@
 [project]
-name = "qtlexplorer-infra"
+name = "explorers-infra"
 version = "0.1.0"
-description = "xQTL Explorer AWS CDK infrastructure"
+description = "AWS CDK infrastructure for the Explorer apps"
 requires-python = "==3.12.*"
 dependencies = [
     "aws-cdk-lib==2.277.0",
