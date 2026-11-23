@@ -1,0 +1,14 @@
+vpc_cidr: 10.252.172.0/24
+fqdn: dev.xqtlexplorer.adknowledgeportal.org
+certificate_id: ce35afd1-c1a3-4b39-8f90-9636aa472981
+tags:
+  CostCenter: BrainCell QTL / 124900
+  Environment: dev
+autoscale:
+  min: 1
+  max: 2
+google_tag_manager:
+  enabled: false
+  container_id: ""
+app:
+  version: edge

@@ -11,72 +11,40 @@ from src.service_props import ServiceProps, ServiceSecret
 from src.service_stack import LoadBalancedServiceStack, ServiceStack
 from src.docdb_props import DocdbProps
 from src.docdb_stack import DocdbStack
+from src.explorer_config import ConfigError, load_config
 
-# get the environment and set environment specific variables
-VALID_ENVIRONMENTS = ["dev", "stage", "prod"]
-environment = environ.get("ENV")
-match environment:
-    case "prod":
-        environment_variables = {
-            "VPC_CIDR": "10.252.174.0/24",
-            "FQDN": "xqtlexplorer.adknowledgeportal.org",
-            "CERTIFICATE_ID": "ccf7a7bb-2d30-40ef-89b8-5c9c0581cee5",
-            "TAGS": {"CostCenter": "BrainCell QTL / 124900", "Environment": "prod"},
-            "AUTO_SCALE_CAPACITY": {"min": 2, "max": 4},
-            "GHCR_PACKAGE_VERSION": "edge",
-            # TODO(EX-9): enable GTM with the QTL container ID once it exists
-            "GTM_ENABLED": "false",
-            "GTM_CONTAINER_ID": "",
-        }
-    case "stage":
-        environment_variables = {
-            "VPC_CIDR": "10.252.173.0/24",
-            "FQDN": "stage.xqtlexplorer.adknowledgeportal.org",
-            "CERTIFICATE_ID": "ccf7a7bb-2d30-40ef-89b8-5c9c0581cee5",
-            "TAGS": {"CostCenter": "BrainCell QTL / 124900", "Environment": "stage"},
-            "AUTO_SCALE_CAPACITY": {"min": 2, "max": 4},
-            "GHCR_PACKAGE_VERSION": "edge",
-            "GTM_ENABLED": "false",
-            "GTM_CONTAINER_ID": "",
-        }
-    case "dev":
-        environment_variables = {
-            "VPC_CIDR": "10.252.172.0/24",
-            "FQDN": "dev.xqtlexplorer.adknowledgeportal.org",
-            "CERTIFICATE_ID": "ce35afd1-c1a3-4b39-8f90-9636aa472981",
-            "TAGS": {"CostCenter": "BrainCell QTL / 124900", "Environment": "dev"},
-            "AUTO_SCALE_CAPACITY": {"min": 1, "max": 2},
-            "GHCR_PACKAGE_VERSION": "edge",
-            "GTM_ENABLED": "false",
-            "GTM_CONTAINER_ID": "",
-        }
-    case _:
-        valid_envs_str = ",".join(VALID_ENVIRONMENTS)
-        raise SystemExit(
-            f"Must set environment variable `ENV` to one of {valid_envs_str}. Currently set to {environment}."
-        )
+try:
+    config = load_config(environ.get("EXPLORER"), environ.get("ENV"))
+except ConfigError as error:
+    raise SystemExit(str(error))
 
-TAG_PREFIX = "qtl/v"
-stack_name_prefix = f"qtl-{environment}"
-fully_qualified_domain_name = environment_variables["FQDN"]
-environment_tags = environment_variables["TAGS"]
-ghcr_package_version = environment_variables["GHCR_PACKAGE_VERSION"]
+explorer = config.explorer
+environment = config.environment
+app_name = f"{explorer}-app"
+api_name = f"{explorer}-api"
+apex_name = f"{explorer}-apex"
+
+TAG_PREFIX = f"{explorer}/v"
+stack_name_prefix = f"{explorer}-{environment}"
+fully_qualified_domain_name = config.fqdn
+environment_tags = config.tags
+ghcr_package_version = config.app.version
 docdb_master_username = "master"
 mongodb_port = 27017
 vpn_cidr = "10.1.0.0/16"
 
 # Resolve image tags for each service
-app_version = get_image_version("qtl-app", ghcr_package_version)
-api_version = get_image_version("qtl-api", ghcr_package_version)
-apex_version = get_image_version("qtl-apex", ghcr_package_version)
+app_version = get_image_version(app_name, ghcr_package_version)
+api_version = get_image_version(api_name, ghcr_package_version)
+apex_version = get_image_version(apex_name, ghcr_package_version)
 
 short_commit_sha = get_short_commit_sha(
     "sage-monorepo", app_version, ghcr_package_version, tag_prefix=TAG_PREFIX
 )
 
 print(
-    f"Using images: qtl-app:{app_version}, qtl-api:{api_version}, "
-    f"qtl-apex:{apex_version}"
+    f"Using images: {app_name}:{app_version}, {api_name}:{api_version}, "
+    f"{apex_name}:{apex_version}"
 )
 
 # Define stacks
@@ -90,7 +58,7 @@ if environment_tags:
 network_stack = NetworkStack(
     scope=cdk_app,
     construct_id=f"{stack_name_prefix}-network",
-    vpc_cidr=environment_variables["VPC_CIDR"],
+    vpc_cidr=config.vpc_cidr,
 )
 
 docdb_props = DocdbProps(
@@ -131,15 +99,15 @@ load_balancer_stack = LoadBalancerStack(
 )
 
 api_props = ServiceProps(
-    container_name="qtl-api",
-    container_location=f"ghcr.io/sage-bionetworks/qtl-api:{api_version}",
+    container_name=api_name,
+    container_location=f"ghcr.io/sage-bionetworks/{api_name}:{api_version}",
     container_port=3333,
     container_memory_reservation=2048,
     container_env_vars={
         "SERVER_PORT": "3333",
         "SPRING_DATA_MONGODB_HOST": docdb_stack.cluster.cluster_endpoint.hostname,
         "SPRING_DATA_MONGODB_PORT": f"{mongodb_port}",
-        "SPRING_DATA_MONGODB_DATABASE": "qtl",
+        "SPRING_DATA_MONGODB_DATABASE": explorer,
         "SPRING_DATA_MONGODB_USERNAME": docdb_master_username,
         "SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE": "admin",
         "SPRING_PROFILES_ACTIVE": f"{environment}",
@@ -150,8 +118,8 @@ api_props = ServiceProps(
             environment_key="SPRING_DATA_MONGODB_PASSWORD",
         )
     ],
-    auto_scale_min_capacity=environment_variables["AUTO_SCALE_CAPACITY"]["min"],
-    auto_scale_max_capacity=environment_variables["AUTO_SCALE_CAPACITY"]["max"],
+    auto_scale_min_capacity=config.autoscale.min,
+    auto_scale_max_capacity=config.autoscale.max,
 )
 api_stack = ServiceStack(
     scope=cdk_app,
@@ -167,24 +135,24 @@ api_stack.service.connections.allow_to_default_port(
 )
 
 app_props = ServiceProps(
-    container_name="qtl-app",
-    container_location=f"ghcr.io/sage-bionetworks/qtl-app:{app_version}",
+    container_name=app_name,
+    container_location=f"ghcr.io/sage-bionetworks/{app_name}:{app_version}",
     container_port=4200,
     container_memory_reservation=1024,
     container_env_vars={
         "APP_VERSION": app_version,
         "COMMIT_SHA": short_commit_sha,
         "CSR_API_URL": f"https://{fully_qualified_domain_name}/api/v1",
-        "SSR_API_URL": "http://qtl-api:3333/v1",
+        "SSR_API_URL": f"http://{api_name}:3333/v1",
         "ENVIRONMENT": environment,
-        "GOOGLE_TAG_MANAGER_ENABLED": environment_variables["GTM_ENABLED"],
-        "GOOGLE_TAG_MANAGER_ID": environment_variables["GTM_CONTAINER_ID"],
+        "GOOGLE_TAG_MANAGER_ENABLED": str(config.google_tag_manager.enabled).lower(),
+        "GOOGLE_TAG_MANAGER_ID": config.google_tag_manager.container_id,
         "SENTRY_ENVIRONMENT": environment,
-        "SENTRY_RELEASE": f"qtl@{ghcr_package_version}+{short_commit_sha}",
+        "SENTRY_RELEASE": f"{explorer}@{ghcr_package_version}+{short_commit_sha}",
     },
     # TODO(EX-161): add the qtl-sentry-dsn secret as SENTRY_DSN once it exists in Secrets Manager
-    auto_scale_min_capacity=environment_variables["AUTO_SCALE_CAPACITY"]["min"],
-    auto_scale_max_capacity=environment_variables["AUTO_SCALE_CAPACITY"]["max"],
+    auto_scale_min_capacity=config.autoscale.min,
+    auto_scale_max_capacity=config.autoscale.max,
 )
 app_stack = ServiceStack(
     scope=cdk_app,
@@ -196,18 +164,18 @@ app_stack = ServiceStack(
 app_stack.add_dependency(api_stack)
 
 apex_props = ServiceProps(
-    container_name="qtl-apex",
-    container_location=f"ghcr.io/sage-bionetworks/qtl-apex:{apex_version}",
+    container_name=apex_name,
+    container_location=f"ghcr.io/sage-bionetworks/{apex_name}:{apex_version}",
     container_port=80,
     container_memory_reservation=200,
     container_env_vars={
-        "API_HOST": "qtl-api",
+        "API_HOST": api_name,
         "API_PORT": "3333",
-        "APP_HOST": "qtl-app",
+        "APP_HOST": app_name,
         "APP_PORT": "4200",
     },
-    auto_scale_min_capacity=environment_variables["AUTO_SCALE_CAPACITY"]["min"],
-    auto_scale_max_capacity=environment_variables["AUTO_SCALE_CAPACITY"]["max"],
+    auto_scale_min_capacity=config.autoscale.min,
+    auto_scale_max_capacity=config.autoscale.max,
 )
 apex_stack = LoadBalancedServiceStack(
     scope=cdk_app,
@@ -216,7 +184,7 @@ apex_stack = LoadBalancedServiceStack(
     cluster=ecs_stack.cluster,
     props=apex_props,
     load_balancer=load_balancer_stack.alb,
-    certificate_id=environment_variables["CERTIFICATE_ID"],
+    certificate_id=config.certificate_id,
     health_check_path="/health",
 )
 apex_stack.add_dependency(app_stack)

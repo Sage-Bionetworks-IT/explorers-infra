@@ -1,0 +1,15 @@
+vpc_cidr: 10.252.174.0/24
+fqdn: xqtlexplorer.adknowledgeportal.org
+certificate_id: ccf7a7bb-2d30-40ef-89b8-5c9c0581cee5
+tags:
+  CostCenter: BrainCell QTL / 124900
+  Environment: prod
+autoscale:
+  min: 2
+  max: 4
+# TODO(EX-9): enable GTM with the QTL container ID once it exists
+google_tag_manager:
+  enabled: false
+  container_id: ""
+app:
+  version: edge

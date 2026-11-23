@@ -69,6 +69,7 @@ jobs:
         run: uv sync --frozen --no-group dev
       - name: Generate cloudformation
         env:
+          EXPLORER: qtl
           ENV: ${{ inputs.aws-environment }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run cdk synth --debug --output ./cdk.out
