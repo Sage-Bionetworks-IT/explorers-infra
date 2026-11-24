@@ -14,7 +14,11 @@ from tools.deploy_plan import (
 )
 
 TARGET = "qtl/dev"
-CONFIG = {"fqdn": "dev.example.org", "app": {"version": "edge"}}
+CONFIG = {
+    "aws_account_id": "123456789012",
+    "fqdn": "dev.example.org",
+    "app": {"version": "edge"},
+}
 
 
 def configs(config: dict | None) -> dict[str, dict | None]:
@@ -30,6 +34,7 @@ def test_config_change_deploys_that_target():
     plans = plan_deploys([config_path(TARGET)], configs(CONFIG), configs(new))
     assert [plan.target for plan in plans] == [TARGET]
     assert plans[0].app is True
+    assert plans[0].aws_account_id == "123456789012"
     assert plans[0].reason == f"{config_path(TARGET)} changed"
 
 
@@ -123,3 +128,10 @@ def test_plan_from_git_without_a_usable_base_deploys_everything(repo, base):
     head = commit_config(repo, CONFIG, "first")
     plans = plan_from_git(base, head, repo)
     assert [plan.target for plan in plans] == [TARGET]
+
+
+@pytest.mark.parametrize("account_id", [None, 123456789012, "12345"])
+def test_missing_or_malformed_account_stops_the_plan(account_id):
+    config = {**CONFIG, "aws_account_id": account_id}
+    with pytest.raises(SystemExit, match="aws_account_id"):
+        plan_deploys(["app.py"], configs(config), configs(config))

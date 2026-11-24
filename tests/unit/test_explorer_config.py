@@ -12,6 +12,7 @@ from src.explorer_config import (
 )
 
 VALID_CONFIG = {
+    "aws_account_id": "123456789012",
     "vpc_cidr": "10.0.0.0/24",
     "fqdn": "dev.example.org",
     "certificate_id": "certificate-id",
@@ -45,6 +46,7 @@ def test_valid_config_is_parsed(tmp_path):
     config = load_config("example", "dev", config_dir=tmp_path)
     assert config.explorer == "example"
     assert config.environment == "dev"
+    assert config.aws_account_id == "123456789012"
     assert config.autoscale.max == 2
     assert config.google_tag_manager.enabled is False
     assert config.app.version == "edge"
@@ -87,4 +89,20 @@ def test_wrong_type_is_rejected(tmp_path):
     data = {**VALID_CONFIG, "autoscale": {"min": True, "max": 2}}
     write_config(tmp_path, "example", "dev", data)
     with pytest.raises(ConfigError, match="autoscale.min must be int"):
+        load_config("example", "dev", config_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("account_id", "message"),
+    [
+        (123456789012, "aws_account_id must be str"),
+        ("12345", "12-digit AWS account ID"),
+        ("12345678901a", "12-digit AWS account ID"),
+    ],
+)
+def test_malformed_aws_account_id_is_rejected(tmp_path, account_id, message):
+    write_config(
+        tmp_path, "example", "dev", {**VALID_CONFIG, "aws_account_id": account_id}
+    )
+    with pytest.raises(ConfigError, match=message):
         load_config("example", "dev", config_dir=tmp_path)

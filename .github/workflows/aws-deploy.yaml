@@ -1,9 +1,9 @@
 # reusable template for deployments to AWS accounts
 name: aws-deploy
 
-# Ensures that only one deploy task per branch/environment will run at a time.
+# Ensures that only one deploy per explorer environment runs at a time.
 concurrency:
-  group: ${{ inputs.aws-environment }}
+  group: ${{ inputs.explorer }}-${{ inputs.environment }}
   cancel-in-progress: false
 
 on:
@@ -21,7 +21,10 @@ on:
       role-duration-seconds:
         type: number
         default: 3600
-      aws-environment:
+      explorer:
+        required: true
+        type: string
+      environment:
         required: true
         type: string
 
@@ -30,7 +33,7 @@ permissions:
 
 jobs:
   deploy:
-    environment: ${{ inputs.aws-environment }}
+    environment: ${{ inputs.explorer }}-${{ inputs.environment }}
     permissions:
       id-token: write
       contents: read
@@ -38,8 +41,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.aws-environment }}
       - name: Install AWS CLI
         run: sudo snap install aws-cli --classic
       - name: Install AWS CDK CLI
@@ -61,5 +62,6 @@ jobs:
       - name: CDK deploy
         run: uv run cdk deploy --all --debug --concurrency 5 --require-approval never
         env:
-          ENV: ${{ inputs.aws-environment }}
+          EXPLORER: ${{ inputs.explorer }}
+          ENV: ${{ inputs.environment }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

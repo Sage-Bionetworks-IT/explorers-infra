@@ -34,6 +34,7 @@ class TargetPlan:
     target: str
     explorer: str
     environment: str
+    aws_account_id: str
     app: bool
     reason: str
 
@@ -41,6 +42,19 @@ class TargetPlan:
 def config_path(target: str) -> str:
     explorer, environment = target.split("/")
     return f"config/{explorer}/{environment}.yaml"
+
+
+def aws_account_id(target: str, config: dict) -> str:
+    account_id = config.get("aws_account_id")
+    if (
+        not isinstance(account_id, str)
+        or len(account_id) != 12
+        or not account_id.isdigit()
+    ):
+        raise SystemExit(
+            f"{config_path(target)} needs a quoted 12-digit aws_account_id."
+        )
+    return account_id
 
 
 def is_cdk_code(path: str) -> bool:
@@ -88,6 +102,7 @@ def plan_deploys(
                 target=target,
                 explorer=explorer,
                 environment=environment,
+                aws_account_id=aws_account_id(target, new_configs[target]),
                 app=True,
                 reason=reason,
             )

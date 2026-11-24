@@ -37,6 +37,7 @@ class AppRelease:
 class ExplorerConfig:
     explorer: str
     environment: str
+    aws_account_id: str
     vpc_cidr: str
     fqdn: str
     certificate_id: str
@@ -83,6 +84,7 @@ def load_config(
     _check_keys(
         root,
         {
+            "aws_account_id",
             "vpc_cidr",
             "fqdn",
             "certificate_id",
@@ -109,6 +111,9 @@ def load_config(
     return ExplorerConfig(
         explorer=explorer,
         environment=environment,
+        aws_account_id=_aws_account_id(
+            root["aws_account_id"], f"{where}: aws_account_id"
+        ),
         vpc_cidr=_typed(root["vpc_cidr"], str, f"{where}: vpc_cidr"),
         fqdn=_typed(root["fqdn"], str, f"{where}: fqdn"),
         certificate_id=_typed(root["certificate_id"], str, f"{where}: certificate_id"),
@@ -136,6 +141,14 @@ def load_config(
         ),
         app=AppRelease(version=_typed(app["version"], str, f"{where}: app.version")),
     )
+
+
+def _aws_account_id(value: object, where: str) -> str:
+    # Quoted in YAML on purpose: an unquoted 12-digit ID would load as an int.
+    account_id = _typed(value, str, where)
+    if len(account_id) != 12 or not account_id.isdigit():
+        raise ConfigError(f"{where} must be a 12-digit AWS account ID.")
+    return account_id
 
 
 def _mapping(value: object, where: str) -> dict:
