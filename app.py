@@ -12,6 +12,7 @@ from src.service_stack import LoadBalancedServiceStack, ServiceStack
 from src.docdb_props import DocdbProps
 from src.docdb_stack import DocdbStack
 from src.config_loader import ConfigError, load_config
+from src.data_import_stack import DataImportStack
 
 try:
     config = load_config(environ.get("EXPLORER"), environ.get("ENV"))
@@ -79,13 +80,27 @@ docdb_stack = DocdbStack(
 docdb_stack.cluster.connections.allow_from(
     ec2.Peer.ipv4(vpn_cidr), ec2.Port.all_traffic(), "Allow all VPN traffic"
 )
-# TODO(EX-208): allow the data import task to reach DocumentDB
 
 ecs_stack = EcsStack(
     scope=cdk_app,
     construct_id=f"{stack_name_prefix}-ecs",
     vpc=network_stack.vpc,
     namespace=fully_qualified_domain_name,
+)
+
+data_import_stack = DataImportStack(
+    scope=cdk_app,
+    construct_id=f"{stack_name_prefix}-data-import",
+    explorer=explorer,
+    environment=environment,
+    image_version=ghcr_package_version,
+    vpc=network_stack.vpc,
+    cluster=ecs_stack.cluster,
+    db_host=docdb_stack.cluster.cluster_endpoint.hostname,
+    db_port=mongodb_port,
+    db_user=docdb_master_username,
+    db_password_secret=docdb_stack.master_password_secret,
+    db_security_group=docdb_stack.cluster.connections.security_groups[0],
 )
 
 # From AWS docs https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect-concepts-deploy.html
