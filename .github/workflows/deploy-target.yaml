@@ -1,0 +1,52 @@
+# Deploy one explorer environment: run the repo's checks (audit, unit tests, synth), deploy the app,
+# then import the data release if asked to.
+name: deploy-target
+
+on:
+  workflow_call:
+    inputs:
+      explorer:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      aws-role-arn:
+        required: true
+        type: string
+      import-data:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yaml
+    with:
+      explorer: ${{ inputs.explorer }}
+      environment: ${{ inputs.environment }}
+  aws-deploy:
+    needs: test
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/aws-deploy.yaml
+    with:
+      explorer: ${{ inputs.explorer }}
+      environment: ${{ inputs.environment }}
+      role-to-assume: ${{ inputs.aws-role-arn }}
+      role-session-name: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}
+  data-import:
+    needs: aws-deploy
+    if: inputs.import-data
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/aws-data-import.yaml
+    with:
+      explorer: ${{ inputs.explorer }}
+      environment: ${{ inputs.environment }}
+      role-to-assume: ${{ inputs.aws-role-arn }}
+      role-session-name: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}

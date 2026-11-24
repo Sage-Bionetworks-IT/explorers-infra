@@ -1,549 +1,102 @@
-# AWS CDK app
+# explorers-infra
 
-A Github template using the AWS CDK to create an ECS infrastructure project for deploying the xQTL Explorer.
+AWS CDK infrastructure for the Explorer apps, the Sage web apps built in
+[sage-monorepo](https://github.com/Sage-Bionetworks/sage-monorepo). This repo deploys each explorer
+environment to AWS ECS from its own config file in [config/](./config/). It's for the developers
+who release those apps.
 
-# Prerequisites
+Explorers deployed from this repo:
 
-AWS CDK projects require some bootstrapping before synthesis or deployment.
-Please review the [bootstapping documentation](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html#getting_started_bootstrap)
-before development.
+- **xQTL Explorer**: [config/qtl/](./config/qtl/), [dev site](https://dev.xqtlexplorer.adknowledgeportal.org/)
 
-> [!Note]
-> Sage IT deploys this CDK bootstrap upon creation of every AWS account in our AWS Organization.
+## Quick start
 
-# Dev Container
-
-This repository provides a [dev container](https://containers.dev/) that includes all the tools
-required to develop this AWS CDK app.
-
-## Opening the project inside its dev container
-
-With VS Code:
-
-1. Clone this repo
-2. File > Open Folder...
-3. A prompt should invite you to open the project inside the dev container. If not, open VS Code
-   Command Palette and select "Dev Containers: Open Folder in Container..."
-
-With GitHub Codespaces:
-
-1. From the main page of this repository, click on the button "Code" > Codespaces > Click on the
-   button "Create codespace"
-
-That's it! You are now inside the dev container and have access to all the development tools.
-
-# Development
-
-All the development tools are provided when developing inside the dev container
-(see above). These tools include Python, AWS CLI, AWS CDK CLI, etc. These tools
-also include a Python virtual environment where all the Python packages needed
-are already installed.
-
-If you decide to develop outside of the dev container, you'll need
-[uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
-Then run:
-
-```console
-./tools/setup.sh
-```
-
-This creates a `.venv` and installs Python dependencies from `uv.lock`.
-Run Python commands via `uv run` so they execute inside the managed env:
-
-```console
-$ uv run cdk synth
-```
-
-(You can also `source .venv/bin/activate` once and drop the `uv run` prefix
-for the rest of your shell session.)
-
-To add or remove dependencies, use `uv add <pkg>` / `uv add --group dev <pkg>` /
-`uv remove <pkg>`. These commands update both `pyproject.toml` and `uv.lock`
-automatically. The `uv-lock` pre-commit hook also keeps the lockfile in sync
-when `pyproject.toml` changes.
-
-## Useful commands
-
-- `cdk ls` list all stacks in the app
-- `cdk synth` emits the synthesized CloudFormation template
-- `cdk deploy` deploy this stack to your default AWS account/region
-- `cdk diff` compare deployed stack with current state
-- `cdk docs` open CDK documentation
-
-# Testing
-
-## Static Analysis
-
-As a pre-deployment step we syntactically validate the CDK json, yaml and
-python files with [pre-commit](https://pre-commit.com).
-
-Please install pre-commit, once installed the file validations will
-automatically run on every commit. Alternatively you can manually
-execute the validations by running `pre-commit run --all-files`.
-
-Create a [GitHub classic personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) with `read:packages` access. The token is used to authenticate with the GitHub API and access the packages endpoint to look up the latest image version for each service. Create an `.env` file with the following variables:
-
-```
-GITHUB_TOKEN="your-token-here"
-ENV="dev"
-```
-
-Verify CDK to Cloudformation conversion by running [cdk synth]:
+Open the repo in its dev container, create a `.env` file with `GITHUB_TOKEN`, `EXPLORER` and
+`ENV`, then synthesize the stacks:
 
 ```console
 env $(cat .env | xargs) uv run cdk synth
 ```
 
-The Cloudformation output is saved to the `cdk.out` folder
+See [Development](./docs/development.md) for the token and the rest of the setup.
 
-## Unit Tests
+# Configuration
 
-Tests are available in the tests folder. Execute the following to run tests:
+The `EXPLORER` and `ENV` environment variables tell the CDK which explorer environment to
+synthesize or deploy. Its settings come from two files:
 
-```
-uv run pytest tests/ -s -v
-```
+- `config/<explorer>/base.yaml`: settings every environment of that explorer shares
+- `config/<explorer>/<env>.yaml`: settings for one environment (`dev`, `stage` or `prod`),
+  merged over `base.yaml`
 
-## Environments
+[config/qtl/dev.yaml](./config/qtl/dev.yaml) is a complete example, with a comment on every key.
 
-An `ENV` environment variable must be set when running the `cdk` command tell the
-CDK which environment's variables to use when synthesising or deploying the stacks.
+| Key                   | Meaning                                                              |
+| --------------------- | -------------------------------------------------------------------- |
+| `AWS_ROLE_ARN`        | OIDC role the deploy workflow assumes in the environment's account   |
+| `VPC_CIDR`            | CIDR block of the environment's VPC                                  |
+| `FQDN`                | Domain the app is served at                                          |
+| `CERTIFICATE_ID`      | ID of the ACM certificate for `FQDN`                                 |
+| `TAGS`                | Tags applied to every AWS resource: `CostCenter` in `base.yaml`, `Environment` per environment |
+| `AUTO_SCALE_CAPACITY` | `MIN` and `MAX` number of tasks per ECS service                      |
+| `GTM_CONTAINER_ID`    | Google Tag Manager container ID; empty turns Google Tag Manager off  |
+| `APP_VERSION`         | Image tag to deploy: `edge` or a release candidate such as `4.0.0-rc3` |
 
-Set environment variables for each environment in the [app.py](./app.py) file:
+Missing or unknown keys and wrong types stop the synth with an error naming the file and key.
 
-```python
-environment_variables = {
-    "VPC_CIDR": "10.254.192.0/24",
-    "FQDN": "dev.app.io",
-    "CERTIFICATE_ID": "0e9682f6-3ffa-46fb-9671-b6349f5164d6",
-    "TAGS": {"CostCenter": "NO PROGRAM / 000000"},
-}
-```
-
-For example, synthesis with the `prod` environment variables:
+For example, synthesis with the QTL `prod` settings:
 
 ```console
-ENV=prod cdk synth
+GITHUB_TOKEN=<token> EXPLORER=qtl ENV=prod uv run cdk synth
 ```
 
 > [!NOTE]
-> The `VPC_CIDR` must be a unique value within our AWS organization. Check our
+> The `VPC_CIDR` must be a unique value within the Sage AWS organization. See the IT
 > [wiki](https://sagebionetworks.jira.com/wiki/spaces/IT/pages/2850586648/Setup+AWS+VPC)
 > for information on how to obtain a unique CIDR
 
-## Certificates
+## Adding an explorer or environment
 
-Certificates to set up HTTPS connections should be created manually in AWS certificate manager.
-This is not automated due to AWS requiring manual verification of the domain ownership.
-Once created take the ARN of the certificate and set that ARN in environment_variables.
+1. Add `config/<explorer>/base.yaml` and `config/<explorer>/<env>.yaml`. Before the first
+   deploy, the environment needs a unique `VPC_CIDR` (see the note above), an ACM certificate
+   for `CERTIFICATE_ID` (see [AWS setup](./docs/aws-setup.md)) and the OIDC role in
+   `AWS_ROLE_ARN`, which Sage IT creates in that AWS account.
+2. Create the `<explorer>-<env>` GitHub environment, limited to the `main` branch.
+3. Add `<explorer>/<env>` to `DEPLOYABLE_TARGETS` in [tools/deploy_plan.py](./tools/deploy_plan.py).
+   Until then, neither merges nor manual runs deploy it. The merge that adds it doesn't deploy it
+   either, because `tools/` isn't CDK code, so run the deploy workflow once afterwards.
 
-![ACM certificate](docs/acm-certificate.png)
+# How deploys work
 
-## Secrets
+Every explorer environment deploys from `main` with GitHub Actions:
 
-Secrets can be manually created in the
-[AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/create_secret.html).
-When naming your secret make sure that the secret does not end in a pattern that matches
-`-??????`, this will cause issues with how AWS CDK looks up secrets.
-
-To pass secrets to a container set the secrets manager `container_secrets`
-when creating a `ServiceProp` object. You'll be creating a list of `ServiceSecret` objects:
-
-```python
-from src.service_props import ServiceProps, ServiceSecret
-
-app_service_props = ServiceProps(
-    container_name="app",
-    container_port=443,
-    container_memory_reservation=1024,
-    container_location="ghcr.io/sage-bionetworks/app:v1.0",
-    container_secrets=[
-        ServiceSecret(
-            secret_name="app/dev/DATABASE",
-            environment_key="NAME_OF_ENVIRONMENT_VARIABLE_SET_FOR_CONTAINER",
-        ),
-        ServiceSecret(
-            secret_name="app/dev/PASSWORD",
-            environment_key="SINGLE_VALUE_SECRET",
-        )
-    ]
-)
-```
-
-For example, the KVs for `app/dev/DATABASE` could be:
-
-```json
-{
-  "DATABASE_USER": "maria",
-  "DATABASE_PASSWORD": "password"
-}
-```
-
-And the value for `app/dev/PASSWORD` could be: `password`
-
-In the application (Python) code the secrets may be loaded into a dict using code like:
-
-```python
-import json
-import os
-
-all_secrets_dict = json.loads(os.environ["NAME_OF_ENVIRONMENT_VARIABLE_SET_FOR_CONTAINER"])
-```
-
-In the case of a single value you may load the value like:
-
-```python
-import os
-
-my_secret = os.environ.get("SINGLE_VALUE_SECRET", None)
-```
-
-![Secrets Manager secret](docs/secrets-manager-secret.png)
+- A PR to `main` runs the checks: dependency audit, unit tests and `cdk synth`.
+- Merging to `main` runs the [deploy workflow](./.github/workflows/deploy.yaml). Its plan step
+  deploys each deployable target whose own config (`config/<explorer>/base.yaml` or
+  `config/<explorer>/<env>.yaml`) or CDK code (`app.py`, `cdk.json`, `pyproject.toml`, `uv.lock`
+  or `src/`) changed, and the run summary says why each target deploys or why nothing does.
+- **Actions → deploy → Run workflow** on `main` redeploys every deployable target, e.g. to pick up new
+  `edge` images. Anyone with write access to this repo can run it.
+- Each target deploys in its own job, with the role in its `AWS_ROLE_ARN`, through the
+  `<explorer>-<env>` GitHub environment (e.g. `qtl-dev`). A failed deploy doesn't stop the
+  other targets, and isn't retried by the next merge, because the plan compares each merge only
+  with the one before it. To retry, run the deploy workflow or use **Re-run failed jobs**.
+- A deploy always applies the latest `main`, not the commit that started its run, so a slower,
+  older run can't roll back a newer deploy.
+- **Actions → data-import → Run workflow**, or the deploy workflow with **Also import the data
+  release** ticked, imports the release in the environment's data image. Other deploys don't
+  reload data. See [Data release](./docs/releasing.md#data-release).
+- The deployable targets are listed in `DEPLOYABLE_TARGETS` in
+  [tools/deploy_plan.py](./tools/deploy_plan.py). Today that's `qtl/dev`.
 
 > [!NOTE]
-> Retrieving secrets requires access to the AWS Secrets Manager
+> A deploy flow diagram is coming soon.
 
-## DNS
+See [Releasing](./docs/releasing.md) for the release steps.
 
-A DNS CNAME must be created in org-formation after the initial
-deployment of the application to make the application available at the desired
-URL. The CDK application exports the DNS name of the Application Load Balancer
-to be consumed in org-formation. [An example PR setting up a CNAME](https://github.com/Sage-Bionetworks-IT/organizations-infra/pull/1299).
+# Documentation
 
-Login to the AWS cloudformation console and navigate to the deployed stack `app-load-balancer`
-and click on the `Outputs` tab. On the row whose key is `LoadBalancerDNS` look for the
-value in the `Export Name` column, e.g., `app-dev-load-balancer-dns`.
-![Cloudformation Load Balancer](docs/cloudformation-load-balancer.png)
-
-Now use the name in the `TargetHostName` definition, for example:
-
-```
-TargetHostName: !CopyValue [!Sub 'app-dev-load-balancer-dns', !Ref DnTDevAccount]
-```
-
-(You would also replace `DnTDevAccount` with the name of the account in which the application is deployed.)
-
-> [!NOTE]
-> Setting up the DNS cname should be done at the very end of this infra setup
-
-## Debugging
-
-Generally CDK deployments will create cloudformation events during a CDK deploy.
-The events can be viewed in the AWS console under the cloudformation service page.
-Viewing those events will help with errors during a deployment. Below are cases
-where it might be difficult to debug due to misleading or insufficient error
-messages from AWS
-
-### Missing Secrets
-
-Each new environment (dev/staging/prod/etc..) may require adding secrets. If a
-secret is not created for the environment you may get an error with the following
-stack trace..
-
-```
-Resource handler returned message: "Error occurred during operation 'ECS Deployment Circuit Breaker was triggered'." (RequestToken: d180e115-ba94-d8a2-acf9-abe17a3aaed9, HandlerErrorCode: GeneralServiceException)
-    new BaseService (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/jsii-kernel-4PEWmj/node_modules/aws-cdk-lib/aws-ecs/lib/base/base-service.js:1:3583)
-    \_ new FargateService (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/jsii-kernel-4PEWmj/node_modules/aws-cdk-lib/aws-ecs/lib/fargate/fargate-service.js:1:967)
-    \_ new ApplicationLoadBalancedFargateService (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/jsii-kernel-4PEWmj/node_modules/aws-cdk-lib/aws-ecs-patterns/lib/fargate/application-load-balanced-fargate-service.js:1:2300)
-    \_ Kernel._create (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/tmpqkmckdm2/lib/program.js:9964:29)
-    \_ Kernel.create (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/tmpqkmckdm2/lib/program.js:9693:29)
-    \_ KernelHost.processRequest (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/tmpqkmckdm2/lib/program.js:11544:36)
-    \_ KernelHost.run (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/tmpqkmckdm2/lib/program.js:11504:22)
-    \_ Immediate._onImmediate (/private/var/folders/qr/ztb40vmn2pncyh8jpsgfnrt40000gp/T/tmpqkmckdm2/lib/program.js:11505:46)
-    \_ processImmediate (node:internal/timers:464:21)
-```
-
-# Deployment
-
-## Bootstrap
-
-There are a few items that need to be manually bootstrapped before deploying the application.
-
-- Add secrets to the AWS Secrets Manager
-- Create an [ACM certificate for the application](#Certificates) using the AWS Certificates Manager
-- Update environment_variables in [app.py](app.py) with variable specific to each environment.
-- Update references to the docker images in [app.py](app.py)
-  (i.e. `ghcr.io/sage-bionetworks/app-xxx:<tag>`)
-- (Optional) Update the `ServiceProps` objects in [app.py](app.py) with parameters specific to
-  each container.
-
-## Login with the AWS CLI
-
-> [!NOTE]
-> This and the following sections assume that you are working in the AWS account
-> `org-sagebase-itsandbox` with the role `Developer` and that you are deploying
-> to the `us-east-1` region. If this assumption is correct, you should be able
-> to simply copy-paste the following commands, otherwise adapting the
-> configuration should be straightforward.
-
-Create the config file if it doesn't exist yet.
-
-```console
-mkdir ~/.aws && touch ~/.aws/config
-```
-
-As a Developer working in Sage IT Sandbox AWS account, add the following profile to the config file.
-
-```ini
-[profile itsandbox-dev]
-sso_start_url = https://d-906769aa66.awsapps.com/start
-sso_region = us-east-1
-sso_account_id = XXXXXXXXX
-sso_role_name = Developer
-```
-
-Login with the AWS CLI:
-
-```console
-aws --profile itsandbox-dev sso login
-```
-
-## Deploy
-
-Deployment requires setting up an [AWS profile](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html)
-then executing the following command:
-
-```console
-env $(cat .env | xargs) AWS_PROFILE=itsandbox-dev AWS_DEFAULT_REGION=us-east-1 uv run cdk deploy --all
-```
-
-## Force new deployment
-
-```console
-AWS_PROFILE=itsandbox-dev AWS_DEFAULT_REGION=us-east-1 aws ecs update-service \
-  --cluster <cluster-name> \
-  --service <service-name> \
-  --force-new-deployment
-```
-
-# Execute a command from a container running on ECS
-
-Once a container has been deployed successfully it is accessible for debugging using the
-[ECS execute-command](https://docs.aws.amazon.com/cli/latest/reference/ecs/execute-command.html)
-
-Example to get an interactive shell run into a container:
-
-```console
-AWS_PROFILE=itsandbox-dev AWS_DEFAULT_REGION=us-east-1 aws ecs execute-command \
-  --cluster AppEcs-ClusterEB0386A7-BygXkQgSvdjY \
-  --task a2916461f65747f390fd3e29f1b387d8 \
-  --container app-mariadb \
-  --command "/bin/sh" --interactive
-```
-
-# CI Workflow
-
-This repo has been set up to use Github Actions CI to continuously deploy the application.
-
-The workflow for continuous integration:
-
-- Create PR from the git dev branch
-- PR is reviewed and approved
-- PR is merged
-- CI deploys changes to the dev environment (dev.app.io) in the AWS dev account.
-- Changes are promoted (or merged) to the git stage branch.
-- CI deploys changes to the staging environment (stage.app.io) in the AWS prod account.
-- Changes are promoted (or merged) to the git prod branch.
-- CI deploys changes to the prod environment (prod.app.io) in the AWS prod account.
-
-![CI deployment workflow](docs/ci-deployment-workflow.png)
-
-# Deployment Process
-
-## Overview
-
-The source code for the application lives in the [sage-monorepo](https://github.com/Sage-Bionetworks/sage-monorepo). When a new git tag is added in the monorepo, images are published to [GHCR](https://github.com/orgs/Sage-Bionetworks/packages?tab=packages&q=qtl). These images are deployed with GHA to AWS Fargate using infrastructure code in this repo.
-
-For regular deployments, changes flow through dev → stage → prod environments. For production hotfixes, we use a short-lived release branch strategy: create a hotfix branch from the affected release tag in sage-monorepo, apply the fix, deploy to stage/prod, then backport to main.
-
-> [!NOTE]
-> There may be a delay before the website updates after any deployment jobs since there is a non-trivial cutover delay (a few minutes).
-
-> [!IMPORTANT]
-> The data release process is coming soon ([EX-7](https://sagebionetworks.jira.com/browse/EX-7)).
-
-### Dev
-
-The development environment was created so that we can redeploy easily. Whenever code in the sage-monorepo is merged after PR was reviewed and all checks approved, a GHA job publishes new images tagged with `edge` and the commit SHA for each service in the stack that changed (e.g. the latest image on the [qtl-app package](https://github.com/Sage-Bionetworks/sage-monorepo/pkgs/container/qtl-app) page carries both the `edge` tag and a `sha-…` tag). The dev infra stack points at the `edge` image tag. So we can rerun the latest `deploy-dev` GHA job to redeploy the latest app code, by looking up the SHA of the most recent image using the `edge` tag and the GitHub API.
-
-So, the footer of the dev site will only show the image tag of the `qtl-app` package, which in this case is the commit SHA.
-
-### Stage/Prod
-
-Stage and prod environments point at a specific git tag that is manually added. As described below, when a new git tag is manually created for this app in the sage-monorepo, a GHA job publishes new images tagged with that git tag (listed on the [qtl-app package](https://github.com/Sage-Bionetworks/sage-monorepo/pkgs/container/qtl-app) page). Then, the stage or prod environment variables in the infra repo can be updated to point at that tag. When the changes are merged to the `stage` or `prod` branch, a GHA job will run the `deploy-stage` or `deploy-prod` job accordingly, which will deploy the images tagged with the git tag.
-
-## Dev Deployment
-
-1. When a PR that affects this app is merged to `main` in the sage-monorepo, wait for the [ci job](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/ci.yml) to finish building and publishing images for the affected projects to GHCR.
-2. Rerun the last [deploy-dev job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-dev.yaml) and wait for the job to successfully update dev deployment. Deployment can be monitored in AWS console in AWS ECS.
-3. Confirm that [dev site](https://dev.xqtlexplorer.adknowledgeportal.org/) shows changes from last merged PR.
-
-## Staging Deployment
-
-1. Review the list of existing tags [here](https://github.com/Sage-Bionetworks/sage-monorepo/tags). Identify the next `qtl` tag. For example, if the last `qtl` tag is `qtl/v4.0.0-rc2`, then the next tag will be `qtl/v4.0.0-rc3`. If the last `qtl` tag doesn’t have a release candidate suffix (e.g. `qtl/v4.0.0`), then the next tag will be the first release candidate of a new version (e.g. `qtl/v4.0.1-rc1`). This follows the convention found at [semver.org](https://semver.org/).
-2. Create a new git tag in the sage-monorepo:
-   - Open devcontainer
-   - Checkout the main branch: `git checkout main`
-   - Fetch latest changes: `git fetch upstream`
-   - Rebase: `git rebase upstream/main`
-   - Tag the commit: `git tag qtl/v4.0.0-rc3`
-   - Push the tag: `git push upstream tag qtl/v4.0.0-rc3`
-3. Wait for sage-monorepo [release GHA job](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/release.yml) to successfully build, tag, and push images to GHCR.
-4. Create a new branch and edit `app.py` to set `GHCR_PACKAGE_VERSION` to the new version number (e.g. `4.0.0-rc3`) and not the tag (e.g. `qtl/v4.0.0-rc3`) in 2 places in the code for `stage` and `prod` configurations. Create PR in this [repo](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra) **to the dev branch**.
-5. Merge PR. Wait for [deploy-dev job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-dev.yaml) to successfully update dev deployment. Deployment can be monitored in AWS console in AWS ECS.
-6. Create PR in this repo **to merge dev into the stage branch**. You can use this [url](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/compare/stage...dev).
-7. Merge PR. Wait for [deploy-stage GHA job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-stage.yaml) to successfully update staging deployment. Deployment can be monitored in AWS console in AWS ECS (see [NOTE on cutover delay](#overview) above).
-8. Confirm that [staging site](https://stage.xqtlexplorer.adknowledgeportal.org/) shows new version’s tag in the app footer.
-
-## Production Deployment
-
-1. Go to the staging site and note the tag in the app footer. Identify the `qtl` release tag. For example, if the staging site tag is `qtl/v4.0.0-rc3`, then the release version will be `qtl/release/v4.0.0`.
-2. Create a new git tag in the sage-monorepo:
-   - Open devcontainer
-   - Checkout the main branch: `git checkout main`
-   - Fetch latest changes: `git fetch upstream`
-   - Rebase: `git rebase upstream/main`
-   - Get the commit hash of the existing tag: `git rev-list -n 1 qtl/v4.0.0-rc3`
-   - Create a new tag pointing to the same commit: `git tag qtl/release/v4.0.0 {commit hash}`
-   - Confirm that the new tag is on the same commit as the previous tag by reviewing the git log: `git log --oneline`
-   - Push the tag: `git push upstream tag qtl/release/v4.0.0`
-3. Create a PR in this repo **to merge the stage branch into the prod branch**. You can use this [url](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/compare/prod...stage).
-4. Merge PR. Wait for the [deploy-prod GHA job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-prod.yaml) to successfully update prod deployment. Deployment can be monitored in AWS console in AWS ECS.
-5. Confirm that [production site](https://xqtlexplorer.adknowledgeportal.org/) shows the same tag in the app footer as the staging site.
-
-## Hotfix Deployment
-
-When a critical bug is discovered in production, use this workflow to deploy a fix quickly while maintaining proper version control and ensuring the fix is not lost in future releases. This process uses a fork-based maintainer workflow with short-lived release branches.
-
-### sage-monorepo: Create Hotfix Branch and Apply Fix
-
-1. **Create the release branch in upstream sage-monorepo**
-
-   As a maintainer, isolate the baseline code by creating a hotfix branch directly from the affected version's release tag (e.g., `qtl/release/v1.0.0`).
-
-   ```console
-   git fetch upstream --tags
-   git checkout -b qtl/hotfix/v1.0.1 qtl/release/v1.0.0
-   git push upstream qtl/hotfix/v1.0.1
-   ```
-
-2. **Branch from your fork**
-
-   In your local environment (connected to your origin fork), fetch the new upstream branch and create your working feature branch.
-
-   ```console
-   git fetch upstream
-   git checkout -b hotfix/{jira-ticket} upstream/qtl/hotfix/v1.0.1
-   ```
-
-3. **Commit the fix and push to fork**
-
-   Apply the fix, run local tests, commit the changes, and push the branch to your fork.
-
-   ```console
-   git add .
-   git commit -m "fix(qtl): resolve production issue ({jira-ticket})"
-   git push origin hotfix/{jira-ticket}
-   ```
-
-4. **Submit Pull Request to the release branch**
-
-   Open a Pull Request on GitHub:
-   - Source: `your-fork/hotfix/{jira-ticket}`
-   - Target: `upstream/qtl/hotfix/v1.0.1`
-
-5. **Merge and tag the release**
-
-   Once the PR passes CI and code review, merge it into `upstream/qtl/hotfix/v1.0.1`. Then create and push the release candidate tag.
-
-   ```console
-   git checkout qtl/hotfix/v1.0.1
-   git pull upstream qtl/hotfix/v1.0.1
-   git tag qtl/v1.0.1-rc1
-   git push upstream qtl/v1.0.1-rc1
-   ```
-
-   Wait for sage-monorepo [release GHA job](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/release.yml) to successfully build, tag, and push images to GHCR.
-
-   > [!NOTE]
-   > If multiple fixes are needed for the same hotfix release, additional PRs can be made to the same `qtl/hotfix/v1.0.1` branch. Increment the release candidate number for each subsequent fix (e.g., `v1.0.1-rc1`, `v1.0.1-rc2`, etc.).
-
-### qtlexplorer-infra repo: Deploy to Staging
-
-6. **Update qtlexplorer-infra repo to point at hotfix tag**
-
-   Create a new branch from dev in this repo and edit `app.py` to set `GHCR_PACKAGE_VERSION` to the new hotfix version (e.g., `1.0.1-rc1`) in 2 places in the code for `stage` and `prod` configurations.
-
-   ```console
-   git checkout dev
-   git pull origin dev
-   git checkout -b hotfix/update-to-v1.0.1-rc1
-   ```
-
-   Edit `app.py` to update `GHCR_PACKAGE_VERSION` for both `stage` and `prod` configurations, then:
-
-   ```console
-   git add app.py
-   git commit -m "chore: update stage to hotfix v1.0.1-rc1"
-   git push origin hotfix/update-to-v1.0.1-rc1
-   ```
-
-   Create PR **to the dev branch**.
-
-7. **Deploy to dev**
-
-   Merge PR. Wait for [deploy-dev job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-dev.yaml) to successfully update dev deployment.
-
-8. **Deploy to staging**
-
-   Create PR **to merge dev into the stage branch**. You can use this [url](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/compare/stage...dev).
-
-   Merge PR. Wait for [deploy-stage GHA job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-stage.yaml) to successfully update staging deployment. Deployment can be monitored in AWS console in AWS ECS.
-
-   Confirm that [staging site](https://stage.xqtlexplorer.adknowledgeportal.org/) shows the hotfix version tag in the app footer.
-
-### sage-monorepo: Create Production Release Tag
-
-9. **Tag the production release**
-
-   Create the final production release tag pointing to the same commit as the release candidate tag.
-
-   ```console
-   git checkout qtl/hotfix/v1.0.1
-   git pull upstream qtl/hotfix/v1.0.1
-   git rev-list -n 1 qtl/v1.0.1-rc1
-   git tag qtl/release/v1.0.1 {commit hash}
-   ```
-
-   Confirm that the new tag is on the same commit as the previous tag by reviewing the git log:
-
-   ```console
-   git log --oneline
-   ```
-
-   Push the tag:
-
-   ```console
-   git push upstream qtl/release/v1.0.1
-   ```
-
-### qtlexplorer-infra repo: Deploy to Production
-
-10. **Deploy to production**
-
-    Create a PR **to merge the stage branch into the prod branch**. You can use this [url](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/compare/prod...stage).
-
-    Merge PR. Wait for the [deploy-prod GHA job](https://github.com/Sage-Bionetworks-IT/qtlexplorer-infra/actions/workflows/deploy-prod.yaml) to successfully update prod deployment. Deployment can be monitored in AWS console in AWS ECS.
-
-    Confirm that [production site](https://xqtlexplorer.adknowledgeportal.org/) shows the hotfix version tag in the app footer.
-
-### sage-monorepo: Backport to Main
-
-11. **Submit Pull Request in sage-monorepo to backport the fix**
-
-    To ensure the fix is not lost in future releases, submit a backport Pull Request:
-    - Source: `upstream/qtl/hotfix/v1.0.1`
-    - Target: `upstream/main`
-
-    > [!NOTE]
-    > Resolve any merge conflicts that occurred due to changes on main since the original release.
+- [Development](./docs/development.md): dev container, local development and tests
+- [AWS setup](./docs/aws-setup.md): bootstrap, AWS CLI login, certificates, secrets, DNS,
+  debugging and manual deploys
+- [Releasing](./docs/releasing.md): dev, staging, production and hotfix deployments
