@@ -34,4 +34,4 @@ jobs:
       environment: ${{ inputs.environment }}
       role-to-assume: ${{ inputs.aws-role-arn }}
       role-session-name: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}
-  # TODO(EX-148): add the data release job here, after `aws-deploy`, for targets whose data changed
+  # TODO(EX-208): add the data import job here, after `aws-deploy`

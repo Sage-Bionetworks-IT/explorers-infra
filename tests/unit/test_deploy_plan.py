@@ -41,12 +41,6 @@ def test_config_change_deploys_that_target():
     assert plans[0].reason == f"{config_path(TARGET)} changed"
 
 
-def test_data_only_change_does_not_deploy_the_app():
-    old = {**CONFIG, "DATA": {"DATA_VERSION": 1}}
-    new = {**CONFIG, "DATA": {"DATA_VERSION": 2}}
-    assert plan_deploys([config_path(TARGET)], configs(old), configs(new)) == []
-
-
 @pytest.mark.parametrize(
     "path", ["app.py", "cdk.json", "pyproject.toml", "uv.lock", "src/service_stack.py"]
 )

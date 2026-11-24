@@ -32,9 +32,6 @@ logger = logging.getLogger(__name__)
 DEPLOYABLE_TARGETS: tuple[str, ...] = ("qtl/dev",)
 CDK_CODE_FILES: tuple[str, ...] = ("app.py", "cdk.json", "pyproject.toml", "uv.lock")
 CDK_CODE_DIRS: tuple[str, ...] = ("src/",)
-# Config sections that don't need a CDK deploy when they change.
-# TODO(EX-148): allow DATA in src/config_loader.py when the data release lands.
-NON_APP_SECTIONS: tuple[str, ...] = ("DATA",)
 NULL_SHA = "0" * 40
 NO_BASE_REASON = "no earlier commit to compare against"
 MANUAL_RUN_REASON = "the workflow was run manually"
@@ -73,12 +70,6 @@ def is_cdk_code(path: str) -> bool:
     return path in CDK_CODE_FILES or path.startswith(CDK_CODE_DIRS)
 
 
-def app_settings(config: dict | None) -> dict | None:
-    if config is None:
-        return None
-    return {key: value for key, value in config.items() if key not in NON_APP_SECTIONS}
-
-
 def plan_deploys(
     changed_files: list[str],
     old_configs: dict[str, dict | None],
@@ -105,7 +96,7 @@ def plan_deploys(
             reason = deploy_all_reason
         elif cdk_changes:
             reason = f"CDK code changed ({', '.join(cdk_changes)})"
-        elif app_settings(old_configs.get(target)) != app_settings(new_configs[target]):
+        elif old_configs.get(target) != new_configs[target]:
             config_files = [base_config_path(target), config_path(target)]
             changed = [path for path in config_files if path in changed_files]
             reason = f"{', '.join(changed) or 'its config'} changed"

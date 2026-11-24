@@ -10,7 +10,7 @@ The examples use the xQTL Explorer (`qtl`); for another explorer, replace `qtl` 
 <!-- TODO(EX-169): make qtl stage and prod deployable -->
 
 > [!IMPORTANT]
-> The data release process is coming soon ([EX-7](https://sagebionetworks.jira.com/browse/EX-7)).
+> The data release process is coming soon ([EX-208](https://sagebionetworks.jira.com/browse/EX-208)).
 
 ## How releases work
 

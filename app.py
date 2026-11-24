@@ -79,7 +79,7 @@ docdb_stack = DocdbStack(
 docdb_stack.cluster.connections.allow_from(
     ec2.Peer.ipv4(vpn_cidr), ec2.Port.all_traffic(), "Allow all VPN traffic"
 )
-# TODO(EX-7): allow the data import job to reach DocumentDB once its approach is decided
+# TODO(EX-208): allow the data import task to reach DocumentDB
 
 ecs_stack = EcsStack(
     scope=cdk_app,
