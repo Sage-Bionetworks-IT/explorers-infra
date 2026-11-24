@@ -1,3 +1,5 @@
+import json
+
 import aws_cdk as cdk
 import aws_cdk.assertions as assertions
 import pytest
@@ -8,6 +10,7 @@ from src.data_import_stack import (
     TASK_CPU,
     TASK_MEMORY_MIB,
     DataImportStack,
+    synapse_token_secret_name,
 )
 from src.docdb_props import DocdbProps
 from src.docdb_stack import DocdbStack
@@ -119,11 +122,17 @@ def test_logs_are_kept_for_a_year_and_outlive_the_stack(template):
     )
 
 
-def test_synapse_token_secret_is_named_for_the_environment(template):
-    template.has_resource_properties(
-        "AWS::SecretsManager::Secret",
-        {"Name": "example-dev-synapse-auth-token"},
+def test_synapse_token_comes_from_a_secret_created_by_hand(template):
+    template.resource_count_is("AWS::SecretsManager::Secret", 0)
+    definition = next(
+        iter(template.find_resources("AWS::ECS::TaskDefinition").values())
     )
+    token = next(
+        secret
+        for secret in definition["Properties"]["ContainerDefinitions"][0]["Secrets"]
+        if secret["Name"] == "SYNAPSE_AUTH_TOKEN"
+    )
+    assert synapse_token_secret_name("example", "dev") in json.dumps(token["ValueFrom"])
 
 
 @pytest.mark.parametrize(

@@ -11,7 +11,11 @@ TASK_CPU = 1024
 TASK_MEMORY_MIB = 4096
 LOG_RETENTION = logs.RetentionDays.ONE_YEAR
 LOG_STREAM_PREFIX = "import"
-SYNAPSE_TOKEN_PLACEHOLDER = "set-me-to-a-synapse-personal-access-token"
+
+
+def synapse_token_secret_name(explorer: str, environment: str) -> str:
+    """The Secrets Manager secret, created by hand, that holds the Synapse token"""
+    return f"{explorer}-{environment}-synapse-auth-token"
 
 
 class DataImportStack(cdk.Stack):
@@ -58,14 +62,10 @@ class DataImportStack(cdk.Stack):
             description=f"Allow the {name} task",
         )
 
-        synapse_token_secret = sm.Secret(
+        synapse_token_secret = sm.Secret.from_secret_name_v2(
             self,
             "SynapseAuthToken",
-            secret_name=f"{explorer}-{environment}-synapse-auth-token",
-            description="Synapse personal access token the data import downloads with",
-            secret_string_value=cdk.SecretValue.unsafe_plain_text(
-                SYNAPSE_TOKEN_PLACEHOLDER
-            ),
+            synapse_token_secret_name(explorer, environment),
         )
 
         log_group = logs.LogGroup(
