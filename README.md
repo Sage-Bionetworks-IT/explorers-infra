@@ -72,13 +72,16 @@ Every explorer environment deploys from `main` with GitHub Actions:
 
 - A PR to `main` runs the checks: dependency audit, unit tests and `cdk synth`.
 - Merging to `main` runs the [deploy workflow](./.github/workflows/deploy.yaml). Its plan step
-  deploys each deployable target whose `config/<explorer>/*.yaml` or CDK code (`app.py`,
-  `cdk.json`, `pyproject.toml`, `uv.lock` or `src/`) changed, and the run summary says why.
-- **Actions → deploy → Run workflow** redeploys every deployable target, e.g. to pick up new
+  deploys each deployable target whose own config (`config/<explorer>/base.yaml` or
+  `config/<explorer>/<env>.yaml`) or CDK code (`app.py`, `cdk.json`, `pyproject.toml`, `uv.lock`
+  or `src/`) changed, and the run summary says why each target deploys or why nothing does.
+- **Actions → deploy → Run workflow** on `main` redeploys every deployable target, e.g. to pick up new
   `edge` images. Anyone with write access to this repo can run it.
 - Each target deploys in its own job, with the role in its `AWS_ROLE_ARN`, through the
   `<explorer>-<env>` GitHub environment (e.g. `qtl-dev`). A failed deploy doesn't stop the
-  other targets.
+  other targets, and isn't retried by the next merge, because the plan compares each merge only
+  with the one before it. To retry, run the deploy workflow, which deploys the latest `main`.
+  **Re-run failed jobs** deploys that run's commit, so use it only on the latest run.
 - The deployable targets are listed in `DEPLOYABLE_TARGETS` in
   [tools/deploy_plan.py](./tools/deploy_plan.py). Today that's `qtl/dev`.
 

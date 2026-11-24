@@ -46,6 +46,10 @@ image's commit SHA.
 
 ## Staging deployment
 
+> [!NOTE]
+> Until [EX-169](https://sagebionetworks.jira.com/browse/EX-169), stop after merging in step 5: the merge only records the version in
+> `config/qtl/stage.yaml`. Waiting for the deploy and step 6 apply once stage is deployable.
+
 1. Pick the next release candidate tag from the
    [sage-monorepo tags](https://github.com/Sage-Bionetworks/sage-monorepo/tags), following
    [semver](https://semver.org/):
@@ -74,6 +78,11 @@ image's commit SHA.
    version in the app footer.
 
 ## Production deployment
+
+> [!NOTE]
+> Until [EX-169](https://sagebionetworks.jira.com/browse/EX-169), take the version in step 1 from `config/qtl/stage.yaml` instead of the
+> staging site, and stop after merging in step 4: the merge only records the version in
+> `config/qtl/prod.yaml`. Waiting for the deploy and step 5 apply once prod is deployable.
 
 1. Note the version in the staging site's app footer, such as `qtl/v4.0.0-rc3`. Its release tag
    is `qtl/release/v4.0.0`.

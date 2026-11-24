@@ -33,6 +33,7 @@ DEPLOYABLE_TARGETS: tuple[str, ...] = ("qtl/dev",)
 CDK_CODE_FILES: tuple[str, ...] = ("app.py", "cdk.json", "pyproject.toml", "uv.lock")
 CDK_CODE_DIRS: tuple[str, ...] = ("src/",)
 # Config sections that don't need a CDK deploy when they change.
+# TODO(EX-148): allow DATA in src/config_loader.py when the data release lands.
 NON_APP_SECTIONS: tuple[str, ...] = ("DATA",)
 NULL_SHA = "0" * 40
 NO_BASE_REASON = "no earlier commit to compare against"
