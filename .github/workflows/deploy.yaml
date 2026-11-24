@@ -45,4 +45,4 @@ jobs:
     with:
       explorer: ${{ matrix.explorer }}
       environment: ${{ matrix.environment }}
-      aws-account-id: ${{ matrix.aws_account_id }}
+      aws-role-arn: ${{ matrix.aws_role_arn }}

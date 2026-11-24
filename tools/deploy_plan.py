@@ -18,6 +18,8 @@ from pathlib import Path
 
 import yaml
 
+from src.explorer_config import AWS_ROLE_ARN_PATTERN
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ class TargetPlan:
     target: str
     explorer: str
     environment: str
-    aws_account_id: str
+    aws_role_arn: str
     app: bool
     reason: str
 
@@ -44,17 +46,13 @@ def config_path(target: str) -> str:
     return f"config/{explorer}/{environment}.yaml"
 
 
-def aws_account_id(target: str, config: dict) -> str:
-    account_id = config.get("aws_account_id")
-    if (
-        not isinstance(account_id, str)
-        or len(account_id) != 12
-        or not account_id.isdigit()
-    ):
+def aws_role_arn(target: str, config: dict) -> str:
+    role_arn = config.get("aws_role_arn")
+    if not isinstance(role_arn, str) or not AWS_ROLE_ARN_PATTERN.fullmatch(role_arn):
         raise SystemExit(
-            f"{config_path(target)} needs a quoted 12-digit aws_account_id."
+            f"{config_path(target)} needs an IAM role ARN in aws_role_arn."
         )
-    return account_id
+    return role_arn
 
 
 def is_cdk_code(path: str) -> bool:
@@ -102,7 +100,7 @@ def plan_deploys(
                 target=target,
                 explorer=explorer,
                 environment=environment,
-                aws_account_id=aws_account_id(target, new_configs[target]),
+                aws_role_arn=aws_role_arn(target, new_configs[target]),
                 app=True,
                 reason=reason,
             )

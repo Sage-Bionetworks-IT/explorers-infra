@@ -1,4 +1,4 @@
-aws_account_id: "607346494281"
+aws_role_arn: arn:aws:iam::607346494281:role/sagebase-github-oidc-explorers-infra
 vpc_cidr: 10.252.172.0/24
 fqdn: dev.xqtlexplorer.adknowledgeportal.org
 certificate_id: ce35afd1-c1a3-4b39-8f90-9636aa472981

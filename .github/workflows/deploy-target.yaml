@@ -10,7 +10,7 @@ on:
       environment:
         required: true
         type: string
-      aws-account-id:
+      aws-role-arn:
         required: true
         type: string
 
@@ -32,6 +32,6 @@ jobs:
     with:
       explorer: ${{ inputs.explorer }}
       environment: ${{ inputs.environment }}
-      role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/sagebase-github-oidc-explorers-infra
+      role-to-assume: ${{ inputs.aws-role-arn }}
       role-session-name: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}
   # TODO(EX-148): add the data release job here, after `aws-deploy`, for targets whose data changed

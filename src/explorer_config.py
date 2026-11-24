@@ -1,5 +1,6 @@
 """Load an explorer's settings for one environment from config/<explorer>/<env>.yaml."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
@@ -8,6 +9,7 @@ import yaml
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 VALID_ENVIRONMENTS = ("dev", "stage", "prod")
+AWS_ROLE_ARN_PATTERN = re.compile(r"arn:aws:iam::\d{12}:role/[\w+=,.@/-]+")
 
 T = TypeVar("T")
 
@@ -37,7 +39,7 @@ class AppRelease:
 class ExplorerConfig:
     explorer: str
     environment: str
-    aws_account_id: str
+    aws_role_arn: str
     vpc_cidr: str
     fqdn: str
     certificate_id: str
@@ -84,7 +86,7 @@ def load_config(
     _check_keys(
         root,
         {
-            "aws_account_id",
+            "aws_role_arn",
             "vpc_cidr",
             "fqdn",
             "certificate_id",
@@ -111,9 +113,7 @@ def load_config(
     return ExplorerConfig(
         explorer=explorer,
         environment=environment,
-        aws_account_id=_aws_account_id(
-            root["aws_account_id"], f"{where}: aws_account_id"
-        ),
+        aws_role_arn=_aws_role_arn(root["aws_role_arn"], f"{where}: aws_role_arn"),
         vpc_cidr=_typed(root["vpc_cidr"], str, f"{where}: vpc_cidr"),
         fqdn=_typed(root["fqdn"], str, f"{where}: fqdn"),
         certificate_id=_typed(root["certificate_id"], str, f"{where}: certificate_id"),
@@ -143,12 +143,13 @@ def load_config(
     )
 
 
-def _aws_account_id(value: object, where: str) -> str:
-    # Quoted in YAML on purpose: an unquoted 12-digit ID would load as an int.
-    account_id = _typed(value, str, where)
-    if len(account_id) != 12 or not account_id.isdigit():
-        raise ConfigError(f"{where} must be a 12-digit AWS account ID.")
-    return account_id
+def _aws_role_arn(value: object, where: str) -> str:
+    role_arn = _typed(value, str, where)
+    if not AWS_ROLE_ARN_PATTERN.fullmatch(role_arn):
+        raise ConfigError(
+            f"{where} must be an IAM role ARN like arn:aws:iam::<12 digits>:role/<name>."
+        )
+    return role_arn
 
 
 def _mapping(value: object, where: str) -> dict:
