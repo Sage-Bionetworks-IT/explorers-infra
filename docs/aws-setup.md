@@ -139,10 +139,10 @@ There are a few items that need to be manually bootstrapped before deploying the
 
 - Add secrets to the AWS Secrets Manager
 - Create an [ACM certificate for the application](#Certificates) using the AWS Certificates Manager
-- Update environment_variables in [app.py](app.py) with variable specific to each environment.
-- Update references to the docker images in [app.py](app.py)
+- Add or edit `config/<explorer>/<env>.yaml` with the settings for each environment (see [Configuration](../README.md#configuration)).
+- Update references to the docker images in [app.py](../app.py)
   (i.e. `ghcr.io/sage-bionetworks/app-xxx:<tag>`)
-- (Optional) Update the `ServiceProps` objects in [app.py](app.py) with parameters specific to
+- (Optional) Update the `ServiceProps` objects in [app.py](../app.py) with parameters specific to
   each container.
 
 ## Login with the AWS CLI
@@ -208,4 +208,3 @@ AWS_PROFILE=itsandbox-dev AWS_DEFAULT_REGION=us-east-1 aws ecs execute-command \
   --container app-mariadb \
   --command "/bin/sh" --interactive
 ```
-

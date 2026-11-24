@@ -93,4 +93,3 @@ Tests are available in the tests folder. Execute the following to run tests:
 ```
 uv run pytest tests/ -s -v
 ```
-

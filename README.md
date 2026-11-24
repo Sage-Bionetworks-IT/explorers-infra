@@ -39,20 +39,20 @@ EXPLORER=qtl ENV=prod cdk synth
 > [wiki](https://sagebionetworks.jira.com/wiki/spaces/IT/pages/2850586648/Setup+AWS+VPC)
 > for information on how to obtain a unique CIDR
 
-# CI Workflow
+# How deploys work
 
-This repo has been set up to use Github Actions CI to continuously deploy the application.
+Every explorer environment deploys from `main` with GitHub Actions:
 
-The workflow for continuous integration:
+- A PR to `main` runs the checks: dependency audit, unit tests and `cdk synth`.
+- Merging to `main` runs the [deploy workflow](./.github/workflows/deploy.yaml). Its plan step
+  deploys each deployable target whose `config/<explorer>/*.yaml` or CDK code changed, and the
+  run summary says why.
+- **Actions → deploy → Run workflow** redeploys every deployable target, e.g. to pick up new
+  `edge` images.
+- Each target deploys with the role in its `AWS_ROLE_ARN`, through the `<explorer>-<env>`
+  GitHub environment (e.g. `qtl-dev`).
 
-- Create PR from the git dev branch
-- PR is reviewed and approved
-- PR is merged
-- CI deploys changes to the dev environment (dev.app.io) in the AWS dev account.
-- Changes are promoted (or merged) to the git stage branch.
-- CI deploys changes to the staging environment (stage.app.io) in the AWS prod account.
-- Changes are promoted (or merged) to the git prod branch.
-- CI deploys changes to the prod environment (prod.app.io) in the AWS prod account.
+Only `qtl/dev` is deployable for now. See [Releasing](./docs/releasing.md) for the release steps.
 
 ![CI deployment workflow](docs/ci-deployment-workflow.png)
 
