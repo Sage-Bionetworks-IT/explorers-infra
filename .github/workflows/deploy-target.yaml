@@ -1,5 +1,5 @@
-# Release one explorer environment: test, then deploy the app.
-name: release-target
+# Deploy one explorer environment: run the repo's checks (audit, unit tests, synth), then deploy the app.
+name: deploy-target
 
 on:
   workflow_call:
@@ -23,7 +23,7 @@ jobs:
     with:
       explorer: ${{ inputs.explorer }}
       environment: ${{ inputs.environment }}
-  app:
+  aws-deploy:
     needs: test
     permissions:
       contents: read
@@ -34,4 +34,4 @@ jobs:
       environment: ${{ inputs.environment }}
       role-to-assume: arn:aws:iam::${{ inputs.aws-account-id }}:role/sagebase-github-oidc-explorers-infra
       role-session-name: ${{ github.repository_owner }}-${{ github.event.repository.name }}-${{ github.run_id }}
-  # TODO(EX-148): add the data release job here, after `app`, for targets whose data changed
+  # TODO(EX-148): add the data release job here, after `aws-deploy`, for targets whose data changed
