@@ -9,8 +9,6 @@ from constructs import Construct
 
 TASK_CPU = 1024
 TASK_MEMORY_MIB = 4096
-# The Fargate maximum. The loader uses it to finish a swap that is in progress.
-STOP_TIMEOUT = cdk.Duration.seconds(120)
 LOG_RETENTION = logs.RetentionDays.ONE_YEAR
 LOG_STREAM_PREFIX = "import"
 SYNAPSE_TOKEN_PLACEHOLDER = "set-me-to-a-synapse-personal-access-token"
@@ -91,11 +89,11 @@ class DataImportStack(cdk.Stack):
             image=ecs.ContainerImage.from_registry(
                 f"ghcr.io/sage-bionetworks/{explorer}-data:{image_version}"
             ),
-            # tini as PID 1, so the loader receives SIGTERM when the task stops
+            # An init process as PID 1, so a stopped task ends the loader at once
+            # instead of only after the stop timeout
             linux_parameters=ecs.LinuxParameters(
                 self, "LinuxParameters", init_process_enabled=True
             ),
-            stop_timeout=STOP_TIMEOUT,
             environment={
                 "DB_HOST": db_host,
                 "DB_PORT": str(db_port),

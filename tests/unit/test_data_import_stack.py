@@ -5,7 +5,6 @@ from aws_cdk import aws_ec2 as ec2
 
 from src.data_import_stack import (
     LOG_STREAM_PREFIX,
-    STOP_TIMEOUT,
     TASK_CPU,
     TASK_MEMORY_MIB,
     DataImportStack,
@@ -66,7 +65,6 @@ def test_task_runs_the_explorer_data_image(template):
                     {
                         "Name": "example-data",
                         "Image": "ghcr.io/sage-bionetworks/example-data:edge",
-                        "StopTimeout": STOP_TIMEOUT.to_seconds(),
                         "LinuxParameters": {
                             "Capabilities": {},
                             "InitProcessEnabled": True,
@@ -80,9 +78,7 @@ def test_task_runs_the_explorer_data_image(template):
 
 def test_task_gets_the_loader_settings_and_secrets(template):
     container = template.find_resources("AWS::ECS::TaskDefinition")
-    definition = next(iter(container.values()))["Properties"][
-        "ContainerDefinitions"
-    ][0]
+    definition = next(iter(container.values()))["Properties"]["ContainerDefinitions"][0]
     environment = {item["Name"]: item["Value"] for item in definition["Environment"]}
     assert environment["DB_PORT"] == str(DB_PORT)
     assert environment["DB_NAME"] == "example"
