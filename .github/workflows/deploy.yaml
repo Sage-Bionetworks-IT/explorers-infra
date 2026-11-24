@@ -3,6 +3,8 @@ name: deploy
 on:
   push:
     branches: ['main']
+  # Manual runs deploy every deployable target, e.g. to pick up new `edge` images.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,11 +29,18 @@ jobs:
         run: uv sync --frozen --no-group dev
       - name: Plan deploys
         id: plan
-        run: uv run python -m tools.deploy_plan --base "$BASE_SHA" --head "$HEAD_SHA"
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            uv run python -m tools.deploy_plan --head "$HEAD_SHA" --all
+          else
+            uv run python -m tools.deploy_plan --base "$BASE_SHA" --head "$HEAD_SHA"
+          fi
         env:
+          EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
   deploy:
+    name: ${{ matrix.target }}
     needs: plan
     if: needs.plan.outputs.has_targets == 'true'
     strategy:

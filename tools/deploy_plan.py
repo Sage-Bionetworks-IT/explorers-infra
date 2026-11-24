@@ -2,6 +2,7 @@
 
 Usage (in CI):
     python -m tools.deploy_plan --base <sha before the push> --head <sha after it>
+    python -m tools.deploy_plan --head <sha> --all   # manual run: deploy every target
 
 Writes `matrix` (JSON list of targets) and `has_targets` to $GITHUB_OUTPUT and a
 short explanation to $GITHUB_STEP_SUMMARY. Without those variables, prints the
@@ -34,6 +35,8 @@ CDK_CODE_DIRS: tuple[str, ...] = ("src/",)
 # Config sections that don't need a CDK deploy when they change.
 NON_APP_SECTIONS: tuple[str, ...] = ("DATA",)
 NULL_SHA = "0" * 40
+NO_BASE_REASON = "no earlier commit to compare against"
+MANUAL_RUN_REASON = "the workflow was run manually"
 
 
 @dataclass(frozen=True)
@@ -79,12 +82,12 @@ def plan_deploys(
     changed_files: list[str],
     old_configs: dict[str, dict | None],
     new_configs: dict[str, dict | None],
-    compare: bool = True,
+    deploy_all_reason: str | None = None,
 ) -> list[TargetPlan]:
     """Decide what each deployable target needs.
 
-    `compare=False` means there is no earlier commit to compare against, so every
-    deployable target gets an app deploy.
+    With `deploy_all_reason`, every deployable target gets an app deploy for that
+    reason, whatever changed.
     """
     cdk_changes = sorted(path for path in changed_files if is_cdk_code(path))
     plans = []
@@ -97,8 +100,8 @@ def plan_deploys(
                 config_path(target),
             )
             continue
-        if not compare:
-            reason = "no earlier commit to compare against"
+        if deploy_all_reason:
+            reason = deploy_all_reason
         elif cdk_changes:
             reason = f"CDK code changed ({', '.join(cdk_changes)})"
         elif app_settings(old_configs.get(target)) != app_settings(new_configs[target]):
@@ -158,10 +161,17 @@ def read_config_at(commit: str, target: str, cwd: Path) -> dict | None:
         raise SystemExit(str(error))
 
 
-def plan_from_git(base: str | None, head: str, cwd: Path) -> list[TargetPlan]:
-    compare = commit_exists(base, cwd)
-    if not compare:
+def plan_from_git(
+    base: str | None, head: str, cwd: Path, deploy_all: bool = False
+) -> list[TargetPlan]:
+    compare = not deploy_all and commit_exists(base, cwd)
+    if deploy_all:
+        deploy_all_reason = MANUAL_RUN_REASON
+    elif not compare:
+        deploy_all_reason = NO_BASE_REASON
         logger.info("No usable base commit (%s); deploying every target.", base)
+    else:
+        deploy_all_reason = None
     changed_files = changed_files_between(base, head, cwd) if compare else []
     old_configs = {
         target: read_config_at(base, target, cwd) if compare else None
@@ -170,7 +180,9 @@ def plan_from_git(base: str | None, head: str, cwd: Path) -> list[TargetPlan]:
     new_configs = {
         target: read_config_at(head, target, cwd) for target in DEPLOYABLE_TARGETS
     }
-    return plan_deploys(changed_files, old_configs, new_configs, compare=compare)
+    return plan_deploys(
+        changed_files, old_configs, new_configs, deploy_all_reason=deploy_all_reason
+    )
 
 
 def summary_lines(plans: list[TargetPlan]) -> list[str]:
@@ -183,9 +195,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", help="commit before the push")
     parser.add_argument("--head", required=True, help="commit after the push")
+    parser.add_argument(
+        "--all", action="store_true", help="deploy every deployable target"
+    )
     args = parser.parse_args()
 
-    plans = plan_from_git(args.base, args.head, Path.cwd())
+    plans = plan_from_git(args.base, args.head, Path.cwd(), deploy_all=args.all)
     matrix = json.dumps([asdict(plan) for plan in plans])
     for line in summary_lines(plans):
         logger.info(line)

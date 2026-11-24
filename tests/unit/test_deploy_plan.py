@@ -6,6 +6,8 @@ import yaml
 
 from tools.deploy_plan import (
     DEPLOYABLE_TARGETS,
+    MANUAL_RUN_REASON,
+    NO_BASE_REASON,
     base_config_path,
     NULL_SHA,
     config_path,
@@ -69,9 +71,11 @@ def test_other_changes_deploy_nothing(path):
 
 
 def test_without_a_base_commit_every_target_deploys():
-    plans = plan_deploys([], configs(None), configs(CONFIG), compare=False)
+    plans = plan_deploys(
+        [], configs(None), configs(CONFIG), deploy_all_reason=NO_BASE_REASON
+    )
     assert [plan.target for plan in plans] == list(DEPLOYABLE_TARGETS)
-    assert plans[0].reason == "no earlier commit to compare against"
+    assert plans[0].reason == NO_BASE_REASON
 
 
 def test_target_without_a_config_file_is_skipped():
@@ -165,3 +169,14 @@ def test_missing_or_malformed_role_arn_stops_the_plan(role_arn):
     config = {**CONFIG, "AWS_ROLE_ARN": role_arn}
     with pytest.raises(SystemExit, match="AWS_ROLE_ARN"):
         plan_deploys(["app.py"], configs(config), configs(config))
+
+
+def test_manual_run_deploys_every_target_even_when_nothing_changed(repo):
+    base = commit_config(repo, CONFIG, "base")
+    (repo / "README.md").write_text("docs")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "docs")
+    head = git(repo, "rev-parse", "HEAD")
+    plans = plan_from_git(base, head, repo, deploy_all=True)
+    assert [plan.target for plan in plans] == [TARGET]
+    assert plans[0].reason == MANUAL_RUN_REASON
