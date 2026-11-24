@@ -81,6 +81,11 @@ my_secret = os.environ.get("SINGLE_VALUE_SECRET", None)
 > [!NOTE]
 > Retrieving secrets requires access to the AWS Secrets Manager
 
+Before the first data import into an environment, create a secret named
+`<explorer>-<env>-synapse-auth-token` (e.g. `qtl-dev-synapse-auth-token`) holding the Synapse
+personal access token the import downloads with, as plain text. The import task reads it by
+that name; without it, the task fails to start.
+
 ## DNS
 
 A DNS CNAME must be created in org-formation after the initial

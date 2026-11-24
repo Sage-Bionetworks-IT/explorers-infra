@@ -9,9 +9,6 @@ The examples use the xQTL Explorer (`qtl`); for another explorer, replace `qtl` 
 > yet ([EX-169](https://sagebionetworks.jira.com/browse/EX-169)).
 <!-- TODO(EX-169): make qtl stage and prod deployable -->
 
-> [!IMPORTANT]
-> The data release process is coming soon ([EX-208](https://sagebionetworks.jira.com/browse/EX-208)).
-
 ## How releases work
 
 The app code lives in [sage-monorepo](https://github.com/Sage-Bionetworks/sage-monorepo), which
@@ -43,6 +40,60 @@ image's commit SHA.
 2. Run the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml): **Actions → deploy → Run workflow** on `main`. Wait for it to finish.
 3. Confirm that the [dev site](https://dev.xqtlexplorer.adknowledgeportal.org/) shows the changes
    from the last merged PR.
+
+## Data release
+
+A data release is the `dataFile` (the release manifest's Synapse ID) and `dataVersion` in the
+explorer's `data-release.json`, which is built into its data image. For example:
+
+```json
+{
+  "dataFile": "syn78309815",
+  "dataVersion": "6"
+}
+```
+
+Releasing new data means a sage-monorepo PR, then an import run here. App deploys don't reload
+data unless **Also import the data release** is ticked, so the import is its own step.
+
+1. In sage-monorepo, set `dataFile` and `dataVersion` in
+   `apps/qtl/data/src/data/data-release.json` and merge the PR. If the release adds, removes or
+   changes a collection, change `apps/qtl/data/src/data/collections.json` in the same PR.
+2. Wait for the
+   [ci workflow](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/ci.yml) to
+   publish the new `qtl-data:edge` image to GHCR.
+3. Run the [data-import workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/data-import.yaml):
+   **Actions → data-import → Run workflow** on `main`, with target `qtl/dev`. If the app changed
+   too, run the deploy workflow with **Also import the data release** ticked instead: it deploys
+   the app first, then imports.
+4. Follow the import's log in the run. A failed import fails the run.
+5. Confirm that `https://dev.xqtlexplorer.adknowledgeportal.org/api/v1/data-version` returns the
+   new version.
+
+To roll back, put the previous `dataFile`, `dataVersion` and any `collections.json` change back
+in a new sage-monorepo PR, then import again.
+
+Stage and prod import the release in their own image tag, once they're deployable
+([EX-169](https://sagebionetworks.jira.com/browse/EX-169)).
+
+Before the first import into an environment, create its Synapse token secret; see
+[Secrets](./aws-setup.md#secrets).
+
+### If the import fails
+
+- The import loads the release into staging copies and swaps them in only after they pass their
+  checks. The log's last record, `run_completed`, says what the site serves now in
+  `live_release`: `previous` (the old release, unchanged), `new`, or `mixed` (the swap stopped
+  partway, so some collections are on each release).
+- Run the import again to repair a `mixed` result or a failure such as a download error. It
+  imports the release in the current data image. If the release itself failed its checks, fix the
+  data or roll back first.
+- The log is in the run and in CloudWatch under `/qtl/dev/data-import`, kept for a year. Checking
+  CloudWatch or the ECS task needs console access to the dev account (agora dev,
+  `607346494281`).
+- "Another data import for qtl/dev is running" means an earlier import (task family
+  `qtl-dev-data-import`) is still going. Wait for it to finish, then run the import again.
+  Stopping it during its swap can leave a `mixed` release.
 
 ## Staging deployment
 

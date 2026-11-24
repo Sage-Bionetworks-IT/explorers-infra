@@ -83,6 +83,9 @@ Every explorer environment deploys from `main` with GitHub Actions:
   with the one before it. To retry, run the deploy workflow or use **Re-run failed jobs**.
 - A deploy always applies the latest `main`, not the commit that started its run, so a slower,
   older run can't roll back a newer deploy.
+- **Actions → data-import → Run workflow**, or the deploy workflow with **Also import the data
+  release** ticked, imports the release in the environment's data image. Other deploys don't
+  reload data. See [Data release](./docs/releasing.md#data-release).
 - The deployable targets are listed in `DEPLOYABLE_TARGETS` in
   [tools/deploy_plan.py](./tools/deploy_plan.py). Today that's `qtl/dev`.
 
