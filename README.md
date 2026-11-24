@@ -1,6 +1,10 @@
-# AWS CDK app
+# explorers-infra
 
-A Github template using the AWS CDK to create an ECS infrastructure project for deploying the xQTL Explorer.
+AWS CDK infrastructure for the Explorer apps. Each explorer environment is deployed to ECS from its own config file in [config/](./config/).
+
+Explorers deployed from this repo:
+
+- **xQTL Explorer**: [config/qtl/](./config/qtl/)
 
 # Prerequisites
 
@@ -85,6 +89,7 @@ Create a [GitHub classic personal access token](https://docs.github.com/en/authe
 
 ```
 GITHUB_TOKEN="your-token-here"
+EXPLORER="qtl"
 ENV="dev"
 ```
 
@@ -104,26 +109,32 @@ Tests are available in the tests folder. Execute the following to run tests:
 uv run pytest tests/ -s -v
 ```
 
-## Environments
+## Configuration
 
-An `ENV` environment variable must be set when running the `cdk` command tell the
-CDK which environment's variables to use when synthesising or deploying the stacks.
+The `EXPLORER` and `ENV` environment variables tell the CDK which explorer environment to
+synthesize or deploy. Its settings come from two files:
 
-Set environment variables for each environment in the [app.py](./app.py) file:
+- `config/<explorer>/base.yaml`: settings every environment of that explorer shares
+- `config/<explorer>/<env>.yaml`: settings for one environment (`dev`, `stage` or `prod`),
+  merged over `base.yaml`
 
-```python
-environment_variables = {
-    "VPC_CIDR": "10.254.192.0/24",
-    "FQDN": "dev.app.io",
-    "CERTIFICATE_ID": "0e9682f6-3ffa-46fb-9671-b6349f5164d6",
-    "TAGS": {"CostCenter": "NO PROGRAM / 000000"},
-}
-```
+| Key                   | Meaning                                                              |
+| --------------------- | -------------------------------------------------------------------- |
+| `AWS_ROLE_ARN`        | OIDC role the deploy workflow assumes in the environment's account   |
+| `VPC_CIDR`            | CIDR block of the environment's VPC                                  |
+| `FQDN`                | Domain the app is served at                                          |
+| `CERTIFICATE_ID`      | ID of the ACM certificate for `FQDN`                                 |
+| `TAGS`                | Tags applied to every AWS resource                                   |
+| `AUTO_SCALE_CAPACITY` | `MIN` and `MAX` number of tasks per ECS service                      |
+| `GTM_CONTAINER_ID`    | Google Tag Manager container ID; empty turns Google Tag Manager off  |
+| `APP_VERSION`         | Image tag to deploy: `edge` or a release version such as `1.2.0`     |
 
-For example, synthesis with the `prod` environment variables:
+Missing or unknown keys and wrong types stop the synth with an error naming the file and key.
+
+For example, synthesis with the QTL `prod` settings:
 
 ```console
-ENV=prod cdk synth
+EXPLORER=qtl ENV=prod cdk synth
 ```
 
 > [!NOTE]
