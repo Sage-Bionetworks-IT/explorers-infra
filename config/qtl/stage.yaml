@@ -1,0 +1,25 @@
+# QTL Explorer stage settings, merged over base.yaml.
+
+# OIDC role the deploy workflow assumes in this environment's AWS account.
+AWS_ROLE_ARN: arn:aws:iam::681175625864:role/sagebase-github-oidc-explorers-infra
+
+# CIDR block of the VPC for this environment.
+VPC_CIDR: 10.252.173.0/24
+
+# Domain the app is served at.
+FQDN: stage.xqtlexplorer.adknowledgeportal.org
+
+# ID of the ACM certificate for FQDN, in this account and region.
+CERTIFICATE_ID: ccf7a7bb-2d30-40ef-89b8-5c9c0581cee5
+
+# Tags applied to every AWS resource, added to the ones in base.yaml.
+TAGS:
+  Environment: stage
+
+# Number of tasks each ECS service scales between.
+AUTO_SCALE_CAPACITY:
+  MIN: 2
+  MAX: 4
+
+# Image tag of the app, API and apex images to deploy: "edge" or a release such as "1.2.0".
+APP_VERSION: edge

@@ -1,0 +1,8 @@
+# Settings every QTL environment shares. Each <env>.yaml is deep-merged over this file.
+
+# Tags applied to every AWS resource. Each environment adds its own Environment tag.
+TAGS:
+  CostCenter: BrainCell QTL / 124900
+
+# Google Tag Manager container ID. Leave empty to turn Google Tag Manager off.
+GTM_CONTAINER_ID: ""

@@ -11,5 +11,5 @@ jobs:
   test:
     uses: ./.github/workflows/test.yaml
     with:
-      aws-environment: dev
-      # ref intentionally omitted: defaults to '' so checkout uses the PR head
+      explorer: qtl
+      environment: dev

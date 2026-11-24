@@ -37,7 +37,7 @@ Tell the user where the file is after writing it.
 
 The ticket ID appears in one of these places (check in order):
 
-1. Recent commit messages on the current branch (not on `dev`) — usually in parentheses at the
+1. Recent commit messages on the current branch (not on `main`) — usually in parentheses at the
    end of the subject, e.g. `chore: add Claude Code MCP and dev container support (EX-4)`
 2. The current git branch name — branches in this repo usually don't include the ticket
    (e.g. `feat/ecs-events-logs`), but check in case one does
@@ -70,13 +70,13 @@ commit messages, and code changes.
 
 ## Step 2 — Analyze the Changes
 
-PRs in this repo target `dev`. Look at all commits on the current branch that are not on `dev`.
-The local `dev` can be behind, so compare against `upstream/dev` when that remote exists
-(`git fetch upstream dev` first), and against `dev` otherwise:
+PRs in this repo target `main`. Look at all commits on the current branch that are not on `main`.
+The local `main` can be behind, so compare against `upstream/main` when that remote exists
+(`git fetch upstream main` first), and against `main` otherwise:
 
 ```bash
-git log upstream/dev..HEAD --oneline
-git diff upstream/dev...HEAD --stat
+git log upstream/main..HEAD --oneline
+git diff upstream/main...HEAD --stat
 ```
 
 Read the changed files to understand what was done. Categorize changes by:
@@ -84,8 +84,15 @@ Read the changed files to understand what was done. Categorize changes by:
 - **Type** — see Step 3
 - **Stacks and AWS resources** — which CDK stacks (`src/*_stack.py`, wired up in `app.py`) are
   added or changed, and which AWS resources that creates, replaces or deletes
-- **Environment-specific changes** — values in the per-environment blocks of `app.py`
-  (dev, stage, prod), such as image versions, capacity or domain names
+- **Environment-specific changes** — values in `config/<explorer>/base.yaml` (shared by every
+  environment of that explorer) or `config/<explorer>/<env>.yaml`, such as `APP_VERSION`,
+  `AUTO_SCALE_CAPACITY` or `FQDN`
+- **Deploy plan** — which targets the merge will deploy, so the description can say what
+  happens after merging. `tools/deploy_plan.py` decides: a changed config file deploys that
+  target, a CDK code change (`app.py`, `cdk.json`, `pyproject.toml`, `uv.lock`, `src/`) deploys
+  every deployable target, and anything else deploys nothing. Only the targets in
+  `DEPLOYABLE_TARGETS` deploy at all, so a change to a target outside it (e.g. `qtl/prod`
+  today) is recorded on merge but not deployed — say so rather than promising a deploy
 - **Deploy impact** — anything that replaces a resource, causes downtime, changes a
   cross-stack export, or needs a manual step before or after deploying (secrets, certificates,
   DNS)
@@ -110,7 +117,7 @@ Rules:
 Match the style of recent commits. Check a few with:
 
 ```bash
-git log upstream/dev --oneline --no-merges -10
+git log upstream/main --oneline --no-merges -10
 ```
 
 Examples from this repo:
@@ -156,7 +163,7 @@ Do NOT include unit test or synth commands on their own — CI handles those.]
 
 ## Validation
 
-[Steps to confirm in DEV once the PR is merged to `dev` and the `deploy-dev` workflow has deployed it.]
+[Steps to confirm in DEV once the PR is merged to `main` and the `deploy` workflow has deployed it.]
 
 - Check to perform in DEV after the deploy
 - Another DEV check
@@ -210,10 +217,13 @@ Both sections are for **human reviewers**, not CI. Split the steps by where they
 
 - **Testing** — anything a reviewer can do from their own machine before the PR is merged,
   without deploying anything. For example:
-  - run `env $(cat .env | xargs) uv run cdk synth` and inspect the synthesized template in `cdk.out/` for a
-    specific resource or property, or confirm an existing stack's template only changed as expected
-- **Validation** — anything that needs the change deployed. Merging to `dev` triggers the
-  `deploy-dev` workflow, so these are checks to run in DEV after that deploy. For example:
+  - run `env $(cat .env | xargs) uv run cdk synth` (with `EXPLORER` and `ENV` in `.env` set to the
+    target) and inspect the synthesized template in `cdk.out/` for a specific resource or
+    property, or confirm an existing stack's template only changed as expected
+- **Validation** — anything that needs the change deployed. Merging to `main` runs the `deploy`
+  workflow for the targets in the deploy plan, so these are checks to run in DEV after that
+  deploy. If the plan deploys nothing (docs, tests or a non-deployable target), say what to
+  check instead, e.g. that the `deploy` run's summary shows "Nothing to deploy". For example:
   - check the new or changed resource in the AWS console or with the AWS CLI
   - trigger the behaviour the change is about (a deploy, a data release, a failover) and confirm
     the result
