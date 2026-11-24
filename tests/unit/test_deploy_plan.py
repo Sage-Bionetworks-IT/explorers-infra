@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from tools.deploy_plan import (
+    DATA_IMPORT_REASON,
     DEPLOYABLE_TARGETS,
     MANUAL_RUN_REASON,
     NO_BASE_REASON,
@@ -12,6 +13,7 @@ from tools.deploy_plan import (
     NULL_SHA,
     config_path,
     plan_deploys,
+    plan_data_import,
     plan_from_git,
     summary_lines,
 )
@@ -174,3 +176,18 @@ def test_manual_run_deploys_every_target_even_when_nothing_changed(repo):
     plans = plan_from_git(base, head, repo, deploy_all=True)
     assert [plan.target for plan in plans] == [TARGET]
     assert plans[0].reason == MANUAL_RUN_REASON
+
+
+def test_data_import_plans_only_the_chosen_target_without_an_app_deploy(repo):
+    head = commit_config(repo, CONFIG, "config")
+    plans = plan_data_import(TARGET, head, repo)
+    assert [plan.target for plan in plans] == [TARGET]
+    assert plans[0].app is False
+    assert plans[0].aws_role_arn == CONFIG["AWS_ROLE_ARN"]
+    assert summary_lines(plans) == [f"- **{TARGET}**: {DATA_IMPORT_REASON}"]
+
+
+def test_data_import_refuses_a_target_that_isnt_deployable(repo):
+    head = commit_config(repo, CONFIG, "config")
+    with pytest.raises(SystemExit, match="qtl/prod isn't deployable"):
+        plan_data_import("qtl/prod", head, repo)

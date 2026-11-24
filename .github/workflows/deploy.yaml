@@ -5,6 +5,11 @@ on:
     branches: ['main']
   # Manual runs deploy every deployable target, e.g. to pick up new `edge` images.
   workflow_dispatch:
+    inputs:
+      import-data:
+        description: Also import the data release after the app deploys
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,3 +60,4 @@ jobs:
       explorer: ${{ matrix.explorer }}
       environment: ${{ matrix.environment }}
       aws-role-arn: ${{ matrix.aws_role_arn }}
+      import-data: ${{ inputs.import-data == true }}

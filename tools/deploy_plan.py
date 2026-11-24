@@ -3,6 +3,7 @@
 Usage (in CI):
     python -m tools.deploy_plan --base <sha before the push> --head <sha after it>
     python -m tools.deploy_plan --head <sha> --all   # manual run: deploy every target
+    python -m tools.deploy_plan --head <sha> --data-import qtl/dev   # manual data import
 
 Writes `matrix` (JSON list of targets) and `has_targets` to $GITHUB_OUTPUT and a
 short explanation to $GITHUB_STEP_SUMMARY. Without those variables, prints the
@@ -35,6 +36,7 @@ CDK_CODE_DIRS: tuple[str, ...] = ("src/",)
 NULL_SHA = "0" * 40
 NO_BASE_REASON = "no earlier commit to compare against"
 MANUAL_RUN_REASON = "the workflow was run manually"
+DATA_IMPORT_REASON = "data import, run manually"
 
 
 @dataclass(frozen=True)
@@ -177,10 +179,39 @@ def plan_from_git(
     )
 
 
+def plan_data_import(target: str, head: str, cwd: Path) -> list[TargetPlan]:
+    """The one target a manual data import runs against, without an app deploy"""
+    if target not in DEPLOYABLE_TARGETS:
+        raise SystemExit(
+            f"{target} isn't deployable. Choose one of {', '.join(DEPLOYABLE_TARGETS)}."
+        )
+    config = read_config_at(head, target, cwd)
+    if config is None:
+        raise SystemExit(f"{config_path(target)} doesn't exist at {head}.")
+    explorer, environment = target.split("/")
+    return [
+        TargetPlan(
+            target=target,
+            explorer=explorer,
+            environment=environment,
+            aws_role_arn=aws_role_arn(target, config),
+            app=False,
+            reason=DATA_IMPORT_REASON,
+        )
+    ]
+
+
 def summary_lines(plans: list[TargetPlan]) -> list[str]:
     if not plans:
         return ["Nothing to deploy: no deployable target's config or CDK code changed."]
-    return [f"- **{plan.target}**: app deploy, because {plan.reason}" for plan in plans]
+    return [
+        (
+            f"- **{plan.target}**: app deploy, because {plan.reason}"
+            if plan.app
+            else f"- **{plan.target}**: {plan.reason}"
+        )
+        for plan in plans
+    ]
 
 
 def main() -> None:
@@ -190,9 +221,15 @@ def main() -> None:
     parser.add_argument(
         "--all", action="store_true", help="deploy every deployable target"
     )
+    parser.add_argument(
+        "--data-import", metavar="TARGET", help="plan a data import for one target"
+    )
     args = parser.parse_args()
 
-    plans = plan_from_git(args.base, args.head, Path.cwd(), deploy_all=args.all)
+    if args.data_import:
+        plans = plan_data_import(args.data_import, args.head, Path.cwd())
+    else:
+        plans = plan_from_git(args.base, args.head, Path.cwd(), deploy_all=args.all)
     matrix = json.dumps([asdict(plan) for plan in plans])
     for line in summary_lines(plans):
         logger.info(line)

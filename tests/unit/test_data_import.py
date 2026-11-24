@@ -312,7 +312,9 @@ def test_main_refuses_while_another_import_runs(monkeypatch, ecs, logs):
         main()
 
 
-def test_main_stops_the_task_when_the_run_is_cancelled(monkeypatch, ecs, logs, tmp_path):
+def test_main_stops_the_task_when_the_run_is_cancelled(
+    monkeypatch, ecs, logs, tmp_path
+):
     from tools.data_import import main
 
     ecs, stubber = ecs
