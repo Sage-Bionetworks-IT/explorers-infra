@@ -11,7 +11,7 @@ from src.service_props import ServiceProps, ServiceSecret
 from src.service_stack import LoadBalancedServiceStack, ServiceStack
 from src.docdb_props import DocdbProps
 from src.docdb_stack import DocdbStack
-from src.explorer_config import ConfigError, load_config
+from src.config_loader import ConfigError, load_config
 
 try:
     config = load_config(environ.get("EXPLORER"), environ.get("ENV"))

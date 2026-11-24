@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.explorer_config import (
+from src.config_loader import (
     BASE_CONFIG_NAME,
     CONFIG_DIR,
     ConfigError,

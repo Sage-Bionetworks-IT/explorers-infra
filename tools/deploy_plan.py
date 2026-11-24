@@ -18,7 +18,7 @@ from pathlib import Path
 
 import yaml
 
-from src.explorer_config import (
+from src.config_loader import (
     AWS_ROLE_ARN_PATTERN,
     BASE_CONFIG_NAME,
     ConfigError,
