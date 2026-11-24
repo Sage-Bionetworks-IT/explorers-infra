@@ -28,7 +28,7 @@ TAG_PREFIX = f"{explorer}/v"
 stack_name_prefix = f"{explorer}-{environment}"
 fully_qualified_domain_name = config.fqdn
 environment_tags = config.tags
-ghcr_package_version = config.app.version
+ghcr_package_version = config.app_version
 docdb_master_username = "master"
 mongodb_port = 27017
 vpn_cidr = "10.1.0.0/16"
@@ -118,8 +118,8 @@ api_props = ServiceProps(
             environment_key="SPRING_DATA_MONGODB_PASSWORD",
         )
     ],
-    auto_scale_min_capacity=config.autoscale.min,
-    auto_scale_max_capacity=config.autoscale.max,
+    auto_scale_min_capacity=config.auto_scale_capacity.min,
+    auto_scale_max_capacity=config.auto_scale_capacity.max,
 )
 api_stack = ServiceStack(
     scope=cdk_app,
@@ -145,14 +145,14 @@ app_props = ServiceProps(
         "CSR_API_URL": f"https://{fully_qualified_domain_name}/api/v1",
         "SSR_API_URL": f"http://{api_name}:3333/v1",
         "ENVIRONMENT": environment,
-        "GOOGLE_TAG_MANAGER_ENABLED": str(config.google_tag_manager.enabled).lower(),
-        "GOOGLE_TAG_MANAGER_ID": config.google_tag_manager.container_id,
+        "GOOGLE_TAG_MANAGER_ENABLED": str(config.gtm_enabled).lower(),
+        "GOOGLE_TAG_MANAGER_ID": config.gtm_container_id,
         "SENTRY_ENVIRONMENT": environment,
         "SENTRY_RELEASE": f"{explorer}@{ghcr_package_version}+{short_commit_sha}",
     },
     # TODO(EX-161): add the qtl-sentry-dsn secret as SENTRY_DSN once it exists in Secrets Manager
-    auto_scale_min_capacity=config.autoscale.min,
-    auto_scale_max_capacity=config.autoscale.max,
+    auto_scale_min_capacity=config.auto_scale_capacity.min,
+    auto_scale_max_capacity=config.auto_scale_capacity.max,
 )
 app_stack = ServiceStack(
     scope=cdk_app,
@@ -174,8 +174,8 @@ apex_props = ServiceProps(
         "APP_HOST": app_name,
         "APP_PORT": "4200",
     },
-    auto_scale_min_capacity=config.autoscale.min,
-    auto_scale_max_capacity=config.autoscale.max,
+    auto_scale_min_capacity=config.auto_scale_capacity.min,
+    auto_scale_max_capacity=config.auto_scale_capacity.max,
 )
 apex_stack = LoadBalancedServiceStack(
     scope=cdk_app,

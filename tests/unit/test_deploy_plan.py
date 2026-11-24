@@ -6,6 +6,7 @@ import yaml
 
 from tools.deploy_plan import (
     DEPLOYABLE_TARGETS,
+    base_config_path,
     NULL_SHA,
     config_path,
     plan_deploys,
@@ -15,9 +16,9 @@ from tools.deploy_plan import (
 
 TARGET = "qtl/dev"
 CONFIG = {
-    "aws_role_arn": "arn:aws:iam::123456789012:role/example",
-    "fqdn": "dev.example.org",
-    "app": {"version": "edge"},
+    "AWS_ROLE_ARN": "arn:aws:iam::123456789012:role/example",
+    "FQDN": "dev.example.org",
+    "APP_VERSION": "edge",
 }
 
 
@@ -30,17 +31,17 @@ def test_qtl_dev_is_the_only_deployable_target():
 
 
 def test_config_change_deploys_that_target():
-    new = {**CONFIG, "app": {"version": "1.2.0"}}
+    new = {**CONFIG, "APP_VERSION": "1.2.0"}
     plans = plan_deploys([config_path(TARGET)], configs(CONFIG), configs(new))
     assert [plan.target for plan in plans] == [TARGET]
     assert plans[0].app is True
-    assert plans[0].aws_role_arn == CONFIG["aws_role_arn"]
+    assert plans[0].aws_role_arn == CONFIG["AWS_ROLE_ARN"]
     assert plans[0].reason == f"{config_path(TARGET)} changed"
 
 
 def test_data_only_change_does_not_deploy_the_app():
-    old = {**CONFIG, "data": {"data_version": 1}}
-    new = {**CONFIG, "data": {"data_version": 2}}
+    old = {**CONFIG, "DATA": {"DATA_VERSION": 1}}
+    new = {**CONFIG, "DATA": {"DATA_VERSION": 2}}
     assert plan_deploys([config_path(TARGET)], configs(old), configs(new)) == []
 
 
@@ -91,8 +92,10 @@ def git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def commit_config(repo: Path, config: dict, message: str) -> str:
-    path = repo / config_path(TARGET)
+def commit_config(
+    repo: Path, config: dict, message: str, path: str = config_path(TARGET)
+) -> str:
+    path = repo / path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(config))
     git(repo, "add", ".")
@@ -110,9 +113,34 @@ def repo(tmp_path: Path) -> Path:
 
 def test_plan_from_git_reads_configs_at_both_commits(repo):
     base = commit_config(repo, CONFIG, "base")
-    head = commit_config(repo, {**CONFIG, "app": {"version": "1.2.0"}}, "bump")
+    head = commit_config(repo, {**CONFIG, "APP_VERSION": "1.2.0"}, "bump")
     plans = plan_from_git(base, head, repo)
     assert [plan.target for plan in plans] == [TARGET]
+
+
+def test_plan_from_git_deploys_the_target_when_its_base_yaml_changes(repo):
+    env_config = {key: value for key, value in CONFIG.items() if key != "FQDN"}
+    commit_config(repo, env_config, "env")
+    base = commit_config(
+        repo, {"FQDN": "dev.example.org"}, "base", base_config_path(TARGET)
+    )
+    head = commit_config(
+        repo, {"FQDN": "new.example.org"}, "move", base_config_path(TARGET)
+    )
+    plans = plan_from_git(base, head, repo)
+    assert [plan.target for plan in plans] == [TARGET]
+    assert plans[0].reason == f"{base_config_path(TARGET)} changed"
+
+
+def test_plan_from_git_ignores_a_base_value_the_environment_overrides(repo):
+    commit_config(repo, CONFIG, "env")
+    base = commit_config(
+        repo, {"FQDN": "a.example.org"}, "base", base_config_path(TARGET)
+    )
+    head = commit_config(
+        repo, {"FQDN": "b.example.org"}, "base", base_config_path(TARGET)
+    )
+    assert plan_from_git(base, head, repo) == []
 
 
 def test_plan_from_git_with_unchanged_config_deploys_nothing(repo):
@@ -134,6 +162,6 @@ def test_plan_from_git_without_a_usable_base_deploys_everything(repo, base):
     "role_arn", [None, 123456789012, "arn:aws:iam::12345:role/example"]
 )
 def test_missing_or_malformed_role_arn_stops_the_plan(role_arn):
-    config = {**CONFIG, "aws_role_arn": role_arn}
-    with pytest.raises(SystemExit, match="aws_role_arn"):
+    config = {**CONFIG, "AWS_ROLE_ARN": role_arn}
+    with pytest.raises(SystemExit, match="AWS_ROLE_ARN"):
         plan_deploys(["app.py"], configs(config), configs(config))

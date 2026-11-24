@@ -1,16 +1,27 @@
-aws_role_arn: arn:aws:iam::681175625864:role/sagebase-github-oidc-explorers-infra
-vpc_cidr: 10.252.174.0/24
-fqdn: xqtlexplorer.adknowledgeportal.org
-certificate_id: ccf7a7bb-2d30-40ef-89b8-5c9c0581cee5
-tags:
-  CostCenter: BrainCell QTL / 124900
+# QTL Explorer prod settings, merged over base.yaml.
+
+# OIDC role the deploy workflow assumes in this environment's AWS account.
+AWS_ROLE_ARN: arn:aws:iam::681175625864:role/sagebase-github-oidc-explorers-infra
+
+# CIDR block of the VPC for this environment.
+VPC_CIDR: 10.252.174.0/24
+
+# Domain the app is served at.
+FQDN: xqtlexplorer.adknowledgeportal.org
+
+# ID of the ACM certificate for FQDN, in this account and region.
+CERTIFICATE_ID: ccf7a7bb-2d30-40ef-89b8-5c9c0581cee5
+
+# Tags applied to every AWS resource, added to the ones in base.yaml.
+TAGS:
   Environment: prod
-autoscale:
-  min: 2
-  max: 4
-# TODO(EX-9): enable GTM with the QTL container ID once it exists
-google_tag_manager:
-  enabled: false
-  container_id: ""
-app:
-  version: edge
+
+# Number of tasks each ECS service scales between.
+AUTO_SCALE_CAPACITY:
+  MIN: 2
+  MAX: 4
+
+# TODO(EX-9): set GTM_CONTAINER_ID to the QTL container ID once it exists
+
+# Image tag of the app, API and apex images to deploy: "edge" or a release such as "1.2.0".
+APP_VERSION: edge

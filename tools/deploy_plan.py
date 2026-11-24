@@ -18,7 +18,12 @@ from pathlib import Path
 
 import yaml
 
-from src.explorer_config import AWS_ROLE_ARN_PATTERN
+from src.explorer_config import (
+    AWS_ROLE_ARN_PATTERN,
+    BASE_CONFIG_NAME,
+    ConfigError,
+    merge_config,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -27,7 +32,7 @@ DEPLOYABLE_TARGETS: tuple[str, ...] = ("qtl/dev",)
 CDK_CODE_FILES: tuple[str, ...] = ("app.py", "cdk.json", "pyproject.toml", "uv.lock")
 CDK_CODE_DIRS: tuple[str, ...] = ("src/",)
 # Config sections that don't need a CDK deploy when they change.
-NON_APP_SECTIONS: tuple[str, ...] = ("data",)
+NON_APP_SECTIONS: tuple[str, ...] = ("DATA",)
 NULL_SHA = "0" * 40
 
 
@@ -46,11 +51,16 @@ def config_path(target: str) -> str:
     return f"config/{explorer}/{environment}.yaml"
 
 
+def base_config_path(target: str) -> str:
+    explorer, _ = target.split("/")
+    return f"config/{explorer}/{BASE_CONFIG_NAME}.yaml"
+
+
 def aws_role_arn(target: str, config: dict) -> str:
-    role_arn = config.get("aws_role_arn")
+    role_arn = config.get("AWS_ROLE_ARN")
     if not isinstance(role_arn, str) or not AWS_ROLE_ARN_PATTERN.fullmatch(role_arn):
         raise SystemExit(
-            f"{config_path(target)} needs an IAM role ARN in aws_role_arn."
+            f"{config_path(target)} needs an IAM role ARN in AWS_ROLE_ARN."
         )
     return role_arn
 
@@ -92,7 +102,9 @@ def plan_deploys(
         elif cdk_changes:
             reason = f"CDK code changed ({', '.join(cdk_changes)})"
         elif app_settings(old_configs.get(target)) != app_settings(new_configs[target]):
-            reason = f"{config_path(target)} changed"
+            config_files = [base_config_path(target), config_path(target)]
+            changed = [path for path in config_files if path in changed_files]
+            reason = f"{', '.join(changed) or 'its config'} changed"
         else:
             continue
         plans.append(
@@ -127,11 +139,23 @@ def changed_files_between(base: str, head: str, cwd: Path) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
-def read_config_at(commit: str, path: str, cwd: Path) -> dict | None:
+def read_yaml_at(commit: str, path: str, cwd: Path) -> object | None:
     result = _git(["show", f"{commit}:{path}"], cwd)
     if result.returncode != 0:
         return None
     return yaml.safe_load(result.stdout)
+
+
+def read_config_at(commit: str, target: str, cwd: Path) -> dict | None:
+    """Return the target's base.yaml merged with its <env>.yaml, as of `commit`."""
+    config = read_yaml_at(commit, config_path(target), cwd)
+    if config is None:
+        return None
+    base = read_yaml_at(commit, base_config_path(target), cwd) or {}
+    try:
+        return merge_config(base, config, f"{config_path(target)} at {commit}")
+    except ConfigError as error:
+        raise SystemExit(str(error))
 
 
 def plan_from_git(base: str | None, head: str, cwd: Path) -> list[TargetPlan]:
@@ -140,12 +164,11 @@ def plan_from_git(base: str | None, head: str, cwd: Path) -> list[TargetPlan]:
         logger.info("No usable base commit (%s); deploying every target.", base)
     changed_files = changed_files_between(base, head, cwd) if compare else []
     old_configs = {
-        target: read_config_at(base, config_path(target), cwd) if compare else None
+        target: read_config_at(base, target, cwd) if compare else None
         for target in DEPLOYABLE_TARGETS
     }
     new_configs = {
-        target: read_config_at(head, config_path(target), cwd)
-        for target in DEPLOYABLE_TARGETS
+        target: read_config_at(head, target, cwd) for target in DEPLOYABLE_TARGETS
     }
     return plan_deploys(changed_files, old_configs, new_configs, compare=compare)
 

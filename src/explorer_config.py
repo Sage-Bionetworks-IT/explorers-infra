@@ -1,4 +1,7 @@
-"""Load an explorer's settings for one environment from config/<explorer>/<env>.yaml."""
+"""Load an explorer's settings for one environment from config/<explorer>/.
+
+`base.yaml` holds what every environment shares; `<env>.yaml` is deep-merged over it.
+"""
 
 import re
 from dataclasses import dataclass
@@ -9,6 +12,7 @@ import yaml
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 VALID_ENVIRONMENTS = ("dev", "stage", "prod")
+BASE_CONFIG_NAME = "base"
 AWS_ROLE_ARN_PATTERN = re.compile(r"arn:aws:iam::\d{12}:role/[\w+=,.@/-]+")
 
 T = TypeVar("T")
@@ -19,20 +23,9 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
-class AutoScale:
+class AutoScaleCapacity:
     min: int
     max: int
-
-
-@dataclass(frozen=True)
-class GoogleTagManager:
-    enabled: bool
-    container_id: str
-
-
-@dataclass(frozen=True)
-class AppRelease:
-    version: str
 
 
 @dataclass(frozen=True)
@@ -44,16 +37,37 @@ class ExplorerConfig:
     fqdn: str
     certificate_id: str
     tags: dict[str, str]
-    autoscale: AutoScale
-    google_tag_manager: GoogleTagManager
-    app: AppRelease
+    auto_scale_capacity: AutoScaleCapacity
+    gtm_container_id: str
+    app_version: str
+
+    @property
+    def gtm_enabled(self) -> bool:
+        return bool(self.gtm_container_id)
 
 
 def available_targets(config_dir: Path = CONFIG_DIR) -> list[str]:
     """List the `<explorer>/<env>` targets that have a config file."""
     return sorted(
-        f"{path.parent.name}/{path.stem}" for path in config_dir.glob("*/*.yaml")
+        f"{path.parent.name}/{path.stem}"
+        for path in config_dir.glob("*/*.yaml")
+        if path.stem in VALID_ENVIRONMENTS
     )
+
+
+def base_config_path(explorer: str, config_dir: Path = CONFIG_DIR) -> Path:
+    return config_dir / explorer / f"{BASE_CONFIG_NAME}.yaml"
+
+
+def merge_config(base: object, override: object, where: str) -> dict:
+    """Deep-merge an environment's settings over the explorer's shared base."""
+    merged = dict(_mapping(base, f"{where} (base)"))
+    for key, value in _mapping(override, where).items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = merge_config(merged[key], value, f"{where}: {key}")
+        else:
+            merged[key] = value
+    return merged
 
 
 def load_config(
@@ -61,7 +75,7 @@ def load_config(
     environment: str | None,
     config_dir: Path = CONFIG_DIR,
 ) -> ExplorerConfig:
-    """Read and validate `config/<explorer>/<environment>.yaml`."""
+    """Read `config/<explorer>/base.yaml` and `<environment>.yaml`, then validate."""
     if not explorer or not environment:
         raise ConfigError(
             "Must set environment variables `EXPLORER` and `ENV`. "
@@ -79,67 +93,51 @@ def load_config(
             f"No config file for {explorer}/{environment} at {path}. "
             f"Available targets: {targets}."
         )
+    base_path = base_config_path(explorer, config_dir)
+    base = yaml.safe_load(base_path.read_text()) if base_path.is_file() else {}
 
-    raw = yaml.safe_load(path.read_text())
     where = str(path)
-    root = _mapping(raw, where)
+    root = merge_config(base, yaml.safe_load(path.read_text()), where)
     _check_keys(
         root,
         {
-            "aws_role_arn",
-            "vpc_cidr",
-            "fqdn",
-            "certificate_id",
-            "tags",
-            "autoscale",
-            "google_tag_manager",
-            "app",
+            "AWS_ROLE_ARN",
+            "VPC_CIDR",
+            "FQDN",
+            "CERTIFICATE_ID",
+            "TAGS",
+            "AUTO_SCALE_CAPACITY",
+            "GTM_CONTAINER_ID",
+            "APP_VERSION",
         },
         where,
     )
 
-    tags = _mapping(root["tags"], f"{where}: tags")
-    autoscale = _mapping(root["autoscale"], f"{where}: autoscale")
-    _check_keys(autoscale, {"min", "max"}, f"{where}: autoscale")
-    google_tag_manager = _mapping(
-        root["google_tag_manager"], f"{where}: google_tag_manager"
-    )
-    _check_keys(
-        google_tag_manager, {"enabled", "container_id"}, f"{where}: google_tag_manager"
-    )
-    app = _mapping(root["app"], f"{where}: app")
-    _check_keys(app, {"version"}, f"{where}: app")
+    tags = _mapping(root["TAGS"], f"{where}: TAGS")
+    capacity = _mapping(root["AUTO_SCALE_CAPACITY"], f"{where}: AUTO_SCALE_CAPACITY")
+    _check_keys(capacity, {"MIN", "MAX"}, f"{where}: AUTO_SCALE_CAPACITY")
 
     return ExplorerConfig(
         explorer=explorer,
         environment=environment,
-        aws_role_arn=_aws_role_arn(root["aws_role_arn"], f"{where}: aws_role_arn"),
-        vpc_cidr=_typed(root["vpc_cidr"], str, f"{where}: vpc_cidr"),
-        fqdn=_typed(root["fqdn"], str, f"{where}: fqdn"),
-        certificate_id=_typed(root["certificate_id"], str, f"{where}: certificate_id"),
+        aws_role_arn=_aws_role_arn(root["AWS_ROLE_ARN"], f"{where}: AWS_ROLE_ARN"),
+        vpc_cidr=_typed(root["VPC_CIDR"], str, f"{where}: VPC_CIDR"),
+        fqdn=_typed(root["FQDN"], str, f"{where}: FQDN"),
+        certificate_id=_typed(root["CERTIFICATE_ID"], str, f"{where}: CERTIFICATE_ID"),
         tags={
-            _typed(key, str, f"{where}: tags key"): _typed(
-                value, str, f"{where}: tags.{key}"
+            _typed(key, str, f"{where}: TAGS key"): _typed(
+                value, str, f"{where}: TAGS.{key}"
             )
             for key, value in tags.items()
         },
-        autoscale=AutoScale(
-            min=_typed(autoscale["min"], int, f"{where}: autoscale.min"),
-            max=_typed(autoscale["max"], int, f"{where}: autoscale.max"),
+        auto_scale_capacity=AutoScaleCapacity(
+            min=_typed(capacity["MIN"], int, f"{where}: AUTO_SCALE_CAPACITY.MIN"),
+            max=_typed(capacity["MAX"], int, f"{where}: AUTO_SCALE_CAPACITY.MAX"),
         ),
-        google_tag_manager=GoogleTagManager(
-            enabled=_typed(
-                google_tag_manager["enabled"],
-                bool,
-                f"{where}: google_tag_manager.enabled",
-            ),
-            container_id=_typed(
-                google_tag_manager["container_id"],
-                str,
-                f"{where}: google_tag_manager.container_id",
-            ),
+        gtm_container_id=_typed(
+            root["GTM_CONTAINER_ID"], str, f"{where}: GTM_CONTAINER_ID"
         ),
-        app=AppRelease(version=_typed(app["version"], str, f"{where}: app.version")),
+        app_version=_typed(root["APP_VERSION"], str, f"{where}: APP_VERSION"),
     )
 
 
