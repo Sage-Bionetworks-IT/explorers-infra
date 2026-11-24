@@ -1,18 +1,7 @@
 # Releasing
 
-# Deployment Process
-
-## Overview
-
-The source code for the application lives in the [sage-monorepo](https://github.com/Sage-Bionetworks/sage-monorepo). When a new git tag is added in the monorepo, images are published to [GHCR](https://github.com/orgs/Sage-Bionetworks/packages?tab=packages&q=qtl). These images are deployed with GHA to AWS Fargate using infrastructure code in this repo.
-
-For regular deployments, changes flow through dev → stage → prod environments. For production hotfixes, we use a short-lived release branch strategy: create a hotfix branch from the affected release tag in sage-monorepo, apply the fix, deploy to stage/prod, then backport to main.
-
-> [!NOTE]
-> There may be a delay before the website updates after any deployment jobs since there is a non-trivial cutover delay (a few minutes).
-
-> [!IMPORTANT]
-> The data release process is coming soon ([EX-7](https://sagebionetworks.jira.com/browse/EX-7)).
+How to release an explorer to dev, staging and production, and how to ship a production hotfix.
+The examples use the xQTL Explorer (`qtl`); for another explorer, replace `qtl` with its name.
 
 > [!IMPORTANT]
 > Only `qtl/dev` is deployable from this repo for now. Merging a change to
@@ -20,52 +9,97 @@ For regular deployments, changes flow through dev → stage → prod environment
 > yet ([EX-169](https://sagebionetworks.jira.com/browse/EX-169)).
 <!-- TODO(EX-169): make qtl stage and prod deployable -->
 
-### Dev
+> [!IMPORTANT]
+> The data release process is coming soon ([EX-7](https://sagebionetworks.jira.com/browse/EX-7)).
 
-The development environment was created so that we can redeploy easily. Whenever code in the sage-monorepo is merged after PR was reviewed and all checks approved, a GHA job publishes new images tagged with `edge` and the commit SHA for each service in the stack that changed (e.g. the latest image on the [qtl-app package](https://github.com/Sage-Bionetworks/sage-monorepo/pkgs/container/qtl-app) page carries both the `edge` tag and a `sha-…` tag). The dev infra stack points at the `edge` image tag. So we can run the `deploy` workflow manually to redeploy the latest app code, by looking up the SHA of the most recent image using the `edge` tag and the GitHub API.
+## How releases work
 
-So, the footer of the dev site will only show the image tag of the `qtl-app` package, which in this case is the commit SHA.
+The app code lives in [sage-monorepo](https://github.com/Sage-Bionetworks/sage-monorepo), which
+publishes the app, API and apex images to
+[GHCR](https://github.com/orgs/Sage-Bionetworks/packages?tab=packages&q=qtl). This repo deploys
+those images to AWS Fargate. `APP_VERSION` in `config/<explorer>/<env>.yaml` picks which images
+an environment runs:
 
-### Stage/Prod
+| Environment | `APP_VERSION`                         | Images come from                        | Deploys when                                                                     |
+| ----------- | ------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------- |
+| dev         | `edge`                                | every merge to sage-monorepo `main`     | the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml) is run manually, or a merge changes its config or CDK code |
+| stage       | a release candidate, e.g. `4.0.0-rc3` | a `qtl/v4.0.0-rc3` tag in sage-monorepo | the config change is merged to `main` in this repo (not yet: [EX-169](https://sagebionetworks.jira.com/browse/EX-169))        |
+| prod        | the version staging runs              | the same tag                            | the config change is merged to `main` in this repo (not yet: [EX-169](https://sagebionetworks.jira.com/browse/EX-169))        |
 
-Stage and prod environments point at a specific git tag that is manually added. As described below, when a new git tag is manually created for this app in the sage-monorepo, a GHA job publishes new images tagged with that git tag (listed on the [qtl-app package](https://github.com/Sage-Bionetworks/sage-monorepo/pkgs/container/qtl-app) page). Then, `APP_VERSION` in `config/qtl/stage.yaml` or `config/qtl/prod.yaml` can be updated to point at that tag. When the change is merged to `main`, the `deploy` workflow deploys that environment with the images tagged with the git tag.
+Releases flow dev → stage → prod. A production hotfix branches from the release tag instead; see
+[Hotfix deployment](#hotfix-deployment).
 
-## Dev Deployment
+The site can take a few minutes to switch to the new version after the deploy workflow finishes.
+The rollout is visible in the AWS console under ECS.
 
-1. When a PR that affects this app is merged to `main` in the sage-monorepo, wait for the [ci job](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/ci.yml) to finish building and publishing images for the affected projects to GHCR.
-2. Run the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml) (**Actions → deploy → Run workflow** on `main`) and wait for the job to successfully update dev deployment. Deployment can be monitored in AWS console in AWS ECS.
-3. Confirm that [dev site](https://dev.xqtlexplorer.adknowledgeportal.org/) shows changes from last merged PR.
+## Dev deployment
 
-## Staging Deployment
+Dev runs `edge`, the newest images published from sage-monorepo `main`. Its app footer shows the
+image's commit SHA.
 
-1. Review the list of existing tags [here](https://github.com/Sage-Bionetworks/sage-monorepo/tags). Identify the next `qtl` tag. For example, if the last `qtl` tag is `qtl/v4.0.0-rc2`, then the next tag will be `qtl/v4.0.0-rc3`. If the last `qtl` tag doesn’t have a release candidate suffix (e.g. `qtl/v4.0.0`), then the next tag will be the first release candidate of a new version (e.g. `qtl/v4.0.1-rc1`). This follows the convention found at [semver.org](https://semver.org/).
-2. Create a new git tag in the sage-monorepo:
-   - Open devcontainer
-   - Checkout the main branch: `git checkout main`
-   - Fetch latest changes: `git fetch upstream`
-   - Rebase: `git rebase upstream/main`
-   - Tag the commit: `git tag qtl/v4.0.0-rc3`
-   - Push the tag: `git push upstream tag qtl/v4.0.0-rc3`
-3. Wait for sage-monorepo [release GHA job](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/release.yml) to successfully build, tag, and push images to GHCR.
-4. Create a new branch and set `APP_VERSION` in `config/qtl/stage.yaml` to the new version number (e.g. `4.0.0-rc3`) and not the tag (e.g. `qtl/v4.0.0-rc3`). Create PR in this [repo](https://github.com/Sage-Bionetworks-IT/explorers-infra) **to `main`**.
-5. Merge PR. Wait for the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml) to successfully update staging deployment. Deployment can be monitored in AWS console in AWS ECS (see [NOTE on cutover delay](#overview) above).
-6. Confirm that [staging site](https://stage.xqtlexplorer.adknowledgeportal.org/) shows new version’s tag in the app footer.
+1. After a PR that affects the explorer merges to `main` in sage-monorepo, wait for the
+   [ci workflow](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/ci.yml) to
+   publish the new images to GHCR.
+2. Run the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml): **Actions → deploy → Run workflow** on `main`. Wait for it to finish.
+3. Confirm that the [dev site](https://dev.xqtlexplorer.adknowledgeportal.org/) shows the changes
+   from the last merged PR.
 
-## Production Deployment
+## Staging deployment
 
-1. Go to the staging site and note the tag in the app footer. Identify the `qtl` release tag. For example, if the staging site tag is `qtl/v4.0.0-rc3`, then the release version will be `qtl/release/v4.0.0`.
-2. Create a new git tag in the sage-monorepo:
-   - Open devcontainer
-   - Checkout the main branch: `git checkout main`
-   - Fetch latest changes: `git fetch upstream`
-   - Rebase: `git rebase upstream/main`
-   - Get the commit hash of the existing tag: `git rev-list -n 1 qtl/v4.0.0-rc3`
-   - Create a new tag pointing to the same commit: `git tag qtl/release/v4.0.0 {commit hash}`
-   - Confirm that the new tag is on the same commit as the previous tag by reviewing the git log: `git log --oneline`
-   - Push the tag: `git push upstream tag qtl/release/v4.0.0`
-3. Create a new branch and set `APP_VERSION` in `config/qtl/prod.yaml` to the version staging runs (e.g. `4.0.0-rc3`). Create PR in this repo **to `main`**.
-4. Merge PR. Wait for the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml) to successfully update prod deployment. Deployment can be monitored in AWS console in AWS ECS.
-5. Confirm that [production site](https://xqtlexplorer.adknowledgeportal.org/) shows the same tag in the app footer as the staging site.
+1. Pick the next release candidate tag from the
+   [sage-monorepo tags](https://github.com/Sage-Bionetworks/sage-monorepo/tags), following
+   [semver](https://semver.org/):
+   - If the last `qtl` tag is a release candidate, such as `qtl/v4.0.0-rc2`, the next tag is
+     `qtl/v4.0.0-rc3`.
+   - If the last release is final, such as `qtl/release/v4.0.0`, the next tag is the first release
+     candidate of a new version: `qtl/v4.0.1-rc1` for a patch, or `qtl/v4.1.0-rc1` for a minor
+     version.
+2. Tag sage-monorepo `main` from its dev container:
+
+   ```console
+   git checkout main
+   git fetch upstream
+   git rebase upstream/main
+   git tag qtl/v4.0.0-rc3
+   git push upstream tag qtl/v4.0.0-rc3
+   ```
+
+3. Wait for the sage-monorepo
+   [release workflow](https://github.com/Sage-Bionetworks/sage-monorepo/actions/workflows/release.yml)
+   to publish the tagged images to GHCR.
+4. In this repo, create a branch and set `APP_VERSION` in `config/qtl/stage.yaml` to the version
+   without the tag prefix: `4.0.0-rc3`, not `qtl/v4.0.0-rc3`. Open a PR to `main`.
+5. Merge the PR and wait for the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml) to finish.
+6. Confirm that the [staging site](https://stage.xqtlexplorer.adknowledgeportal.org/) shows the new
+   version in the app footer.
+
+## Production deployment
+
+1. Note the version in the staging site's app footer, such as `qtl/v4.0.0-rc3`. Its release tag
+   is `qtl/release/v4.0.0`.
+2. Tag the same commit in sage-monorepo from its dev container:
+
+   ```console
+   git checkout main
+   git fetch upstream
+   git rebase upstream/main
+   git rev-list -n 1 qtl/v4.0.0-rc3
+   git tag qtl/release/v4.0.0 {commit hash}
+   git log --oneline
+   ```
+
+   Check in `git log` that the new tag sits on the same commit as the release candidate tag, then
+   push it:
+
+   ```console
+   git push upstream tag qtl/release/v4.0.0
+   ```
+
+3. In this repo, create a branch and set `APP_VERSION` in `config/qtl/prod.yaml` to the version
+   staging runs, such as `4.0.0-rc3`. Open a PR to `main`.
+4. Merge the PR and wait for the [deploy workflow](https://github.com/Sage-Bionetworks-IT/explorers-infra/actions/workflows/deploy.yaml) to finish.
+5. Confirm that the [production site](https://xqtlexplorer.adknowledgeportal.org/) shows the same
+   version in the app footer as the staging site.
 
 ## Hotfix Deployment
 
