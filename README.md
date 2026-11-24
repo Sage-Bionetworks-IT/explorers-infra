@@ -52,9 +52,31 @@ Every explorer environment deploys from `main` with GitHub Actions:
 - Each target deploys with the role in its `AWS_ROLE_ARN`, through the `<explorer>-<env>`
   GitHub environment (e.g. `qtl-dev`).
 
-Only `qtl/dev` is deployable for now. See [Releasing](./docs/releasing.md) for the release steps.
+See [Releasing](./docs/releasing.md) for the release steps.
 
-![CI deployment workflow](docs/ci-deployment-workflow.png)
+```mermaid
+flowchart LR
+  subgraph repo["explorers-infra (main)"]
+    direction TB
+    cfg["config/{explorer}/base.yaml<br/>config/{explorer}/{env}.yaml"]
+    cdk["CDK code<br/>app.py, src/"]
+  end
+
+  subgraph gha["GitHub Actions: deploy workflow"]
+    direction TB
+    trigger["Merge to main<br/>or Run workflow"] --> plan["plan<br/>which targets changed?"]
+    plan --> job["One job per target<br/>{explorer}/{env}"]
+    job --> test["test<br/>audit, unit tests, synth"]
+    test --> deploy["aws-deploy<br/>cdk deploy"]
+  end
+
+  subgraph aws["AWS account from AWS_ROLE_ARN"]
+    stacks["{explorer}-{env} stacks<br/>network, ECS, DocumentDB,<br/>load balancer, services"]
+  end
+
+  repo --> trigger
+  deploy -->|"GitHub environment {explorer}-{env}<br/>OIDC role AWS_ROLE_ARN"| stacks
+```
 
 # Documentation
 
