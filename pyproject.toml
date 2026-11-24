@@ -5,6 +5,7 @@ description = "AWS CDK infrastructure for the Explorer apps"
 requires-python = "==3.12.*"
 dependencies = [
     "aws-cdk-lib==2.277.0",
+    "boto3==1.44.10",
     "constructs==10.8.1",
     "pyyaml==6.0.3",
     "requests==2.34.2",
