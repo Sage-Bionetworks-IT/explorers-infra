@@ -80,8 +80,9 @@ Every explorer environment deploys from `main` with GitHub Actions:
 - Each target deploys in its own job, with the role in its `AWS_ROLE_ARN`, through the
   `<explorer>-<env>` GitHub environment (e.g. `qtl-dev`). A failed deploy doesn't stop the
   other targets, and isn't retried by the next merge, because the plan compares each merge only
-  with the one before it. To retry, run the deploy workflow, which deploys the latest `main`.
-  **Re-run failed jobs** deploys that run's commit, so use it only on the latest run.
+  with the one before it. To retry, run the deploy workflow or use **Re-run failed jobs**.
+- A deploy always applies the latest `main`, not the commit that started its run, so a slower,
+  older run can't roll back a newer deploy.
 - The deployable targets are listed in `DEPLOYABLE_TARGETS` in
   [tools/deploy_plan.py](./tools/deploy_plan.py). Today that's `qtl/dev`.
 

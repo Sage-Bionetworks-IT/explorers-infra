@@ -39,8 +39,12 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
+      # Deploy the newest main, not this run's commit: runs for one target can reach this job out
+      # of order, and an older run would otherwise roll back a newer deploy.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
       - name: Install AWS CLI
         run: sudo snap install aws-cli --classic
       - name: Install AWS CDK CLI
